@@ -13,7 +13,7 @@
     "quality": "vp check",
     "ci": "vp check && vp run check && vp run build",
     "setup:hooks": "vp config --no-agent",
-    "postinstall": "turbo run stub && pnpm setup:hooks",
+    "postinstall": "pnpm setup:hooks && turbo run stub",
     "start-mcp-server": "pnpm --filter @workspace/mcp-server start",
     "start-tunnel": "node ./scripts/tunnel-client/start-cli.js",
     "build-tunnel": "node ./scripts/tunnel-client/build.js"

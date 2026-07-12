@@ -15,10 +15,16 @@ const preservedEnv = fs.existsSync(outputEnvFile) ? fs.readFileSync(outputEnvFil
 
 fs.rmSync(outputDirectory, { recursive: true, force: true })
 fs.mkdirSync(outputDirectory, { recursive: true })
-fs.copyFileSync(path.join(sourceDirectory, 'start-cli.js'), path.join(outputDirectory, 'start-cli.js'))
+fs.copyFileSync(
+  path.join(sourceDirectory, 'start-cli.js'),
+  path.join(outputDirectory, 'start-cli.js')
+)
 
 const sourceYaml = fs.readFileSync(path.join(sourceDirectory, 'tunnel-client.yaml'), 'utf8')
-const bundledYaml = sourceYaml.replace('command: pnpm start-mcp-server', 'command: node ./mcp-server.mjs')
+const bundledYaml = sourceYaml.replace(
+  'command: pnpm start-mcp-server',
+  'command: node ./mcp-server.mjs'
+)
 fs.writeFileSync(path.join(outputDirectory, 'tunnel-client.yaml'), bundledYaml)
 
 if (preservedEnv !== undefined) fs.writeFileSync(outputEnvFile, preservedEnv)

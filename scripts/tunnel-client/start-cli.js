@@ -26,12 +26,19 @@ function loadEnvFile(filename) {
 
 const fileEnv = loadEnvFile(envFile)
 const configuredPath = fileEnv.TUNNEL_CLIENT_PATH || process.env.TUNNEL_CLIENT_PATH
-const executable = configuredPath ? path.resolve(cwd, configuredPath) : path.join(cwd, 'tunnel-client.exe')
-const workspaceRoot = path.resolve(cwd, fileEnv.MCP_WORKSPACE_ROOT || process.env.MCP_WORKSPACE_ROOT || cwd)
+const executable = configuredPath
+  ? path.resolve(cwd, configuredPath)
+  : path.join(cwd, 'tunnel-client.exe')
+const workspaceRoot = path.resolve(
+  cwd,
+  fileEnv.MCP_WORKSPACE_ROOT || process.env.MCP_WORKSPACE_ROOT || cwd
+)
 
 if (!fs.existsSync(executable)) {
   console.error(`Unable to find tunnel-client.exe: ${executable}`)
-  console.error('Place tunnel-client.exe in the current directory or set TUNNEL_CLIENT_PATH in .env.local.')
+  console.error(
+    'Place tunnel-client.exe in the current directory or set TUNNEL_CLIENT_PATH in .env.local.'
+  )
   process.exitCode = 1
 } else if (!fs.existsSync(configFile)) {
   console.error(`Unable to find tunnel-client config: ${configFile}`)
