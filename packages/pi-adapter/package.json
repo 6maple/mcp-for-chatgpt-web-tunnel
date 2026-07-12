@@ -1,0 +1,23 @@
+{
+  "name": "@workspace/pi-adapter",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs"
+    }
+  },
+  "scripts": {
+    "build": "unbuild",
+    "stub": "unbuild --stub",
+    "check": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@earendil-works/pi-coding-agent": "0.80.6",
+    "@workspace/types": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "24.12.4"
+  }
+}

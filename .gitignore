@@ -1,0 +1,13 @@
+*.log
+.env
+.env.local
+*.key
+*.pem
+tunnel-client.exe
+.cache
+node_modules/
+dist/
+.turbo/
+.corepack/
+.pnpm-store/
+.codegraph

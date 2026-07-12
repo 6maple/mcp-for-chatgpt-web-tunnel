@@ -1,0 +1,20 @@
+{
+  "name": "@workspace/mcp-server",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "unbuild",
+    "stub": "unbuild --stub",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "start": "node dist/index.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.29.0",
+    "@workspace/pi-adapter": "workspace:*",
+    "@workspace/types": "workspace:*",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "24.12.4"
+  }
+}

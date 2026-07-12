@@ -1,0 +1,23 @@
+config_version: 1
+
+control_plane:
+  base_url: https://api.openai.com
+  tunnel_id: env:CONTROL_PLANE_TUNNEL_ID
+  api_key: env:CONTROL_PLANE_API_KEY
+  http_proxy: env:CONTROL_PLANE_HTTP_PROXY
+
+log:
+  level: warn
+  format: json
+  http_raw_unsafe: false
+
+health:
+  listen_addr: 127.0.0.1:9810
+
+admin_ui:
+  open_browser: false
+
+mcp:
+  commands:
+    - channel: main
+      command: pnpm start-mcp-server
