@@ -38,6 +38,9 @@ await build({
   target: 'node24',
   packages: 'bundle',
   alias: workspaceAliases,
+  banner: {
+    js: "import { createRequire as createRequireForBundle } from 'node:module'; const require = createRequireForBundle(import.meta.url);",
+  },
   sourcemap: false,
   legalComments: 'none',
   logLevel: 'warning',
