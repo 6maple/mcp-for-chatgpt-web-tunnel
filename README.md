@@ -25,7 +25,7 @@
 apps/mcp-server          MCP 服务入口
 packages/pi-adapter      文件和命令工具适配层
 packages/types           共享类型
-scripts/start-tunnel-client  Tunnel Client 启动脚本和配置
+scripts/tunnel-client       Tunnel Client 启动脚本和配置
 ```
 
 ## 快速开始
@@ -45,21 +45,25 @@ vp install
 ```dotenv
 CONTROL_PLANE_TUNNEL_ID=tunnel_...
 CONTROL_PLANE_API_KEY=sk-...
+TUNNEL_CLIENT_PATH=./tunnel-client.exe
+MCP_WORKSPACE_ROOT=.
 ```
+
+`TUNNEL_CLIENT_PATH` 和 `MCP_WORKSPACE_ROOT` 均可选；未配置时分别默认使用当前工作目录下的 `tunnel-client.exe` 和当前工作目录。相对路径以当前工作目录为基准解析。
 
 ## 下载 Tunnel Client
 
 请从 OpenAI 控制台的 [Tunnels 管理页面](https://platform.openai.com/settings/organization/tunnels) 下载与你的系统匹配的 `tunnel-client`，并将 Windows 可执行文件放到：
 
 ```text
-scripts/start-tunnel-client/tunnel-client.exe
+./tunnel-client.exe
 ```
 
 也可以查看 [OpenAI tunnel-client 仓库](https://github.com/openai/tunnel-client) 获取文档和源码。下载后可先检查配置：
 
 ```powershell
-.\scripts\start-tunnel-client\tunnel-client.exe doctor `
-  --config .\scripts\start-tunnel-client\tunnel-client.yaml `
+.\tunnel-client.exe doctor `
+  --config .\scripts\tunnel-client\tunnel-client.yaml `
   --explain
 ```
 
@@ -74,6 +78,29 @@ pnpm setup:hooks
 ```powershell
 pnpm start-tunnel
 ```
+
+构建独立 Tunnel Client 启动目录：
+
+```powershell
+pnpm build-tunnel
+```
+
+该命令生成 `dist-tunnel-client`，不复制 `tunnel-client.exe`，也不会自动复制 `.env.local`。首次使用时请自行将 `.env.local` 复制到该目录，并将 exe 放入该目录，或在其中配置 `TUNNEL_CLIENT_PATH`。重复构建时会保留已有的 `dist-tunnel-client/.env.local`。
+
+从项目根目录快速启动打包版本。请先将 `.env.local` 和 `tunnel-client.exe` 放入 `dist-tunnel-client`，并在其中的 `.env.local` 配置：
+
+```dotenv
+MCP_WORKSPACE_ROOT=..
+```
+
+然后在终端中执行：
+
+```text
+cd dist-tunnel-client
+node start-cli.js
+```
+
+上述命令适用于 Windows、macOS 和 Linux；退出 Tunnel Client 后可执行 `cd ..` 返回项目根目录。
 
 Tunnel Client 的本地运维地址：
 

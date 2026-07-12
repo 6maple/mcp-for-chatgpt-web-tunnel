@@ -13,12 +13,14 @@
     "quality": "vp check",
     "ci": "vp check && vp run check && vp run build",
     "setup:hooks": "vp config --no-agent",
-    "postinstall": "turbo run stub",
+    "postinstall": "turbo run stub && pnpm setup:hooks",
     "start-mcp-server": "pnpm --filter @workspace/mcp-server start",
-    "start-tunnel": "node ./scripts/start-tunnel-client/cli.js"
+    "start-tunnel": "node ./scripts/tunnel-client/start-cli.js",
+    "build-tunnel": "node ./scripts/tunnel-client/build.js"
   },
   "devDependencies": {
     "@types/node": "24.12.4",
+    "esbuild": "0.25.12",
     "turbo": "2.10.4",
     "typescript": "6.0.3",
     "unbuild": "^3.5.0",
