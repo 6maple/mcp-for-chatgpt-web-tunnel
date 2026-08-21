@@ -16,7 +16,10 @@
     "postinstall": "pnpm setup:hooks && turbo run stub",
     "start-mcp-server": "pnpm --filter @workspace/mcp-server start",
     "start-tunnel": "node ./scripts/tunnel-client/start-cli.js",
-    "build-tunnel": "node ./scripts/tunnel-client/build.js"
+    "install-macos-launchd": "node ./scripts/tunnel-client/install-macos-launchd.js",
+    "build-tunnel": "node ./scripts/tunnel-client/build.js",
+    "test": "pnpm build && pnpm --filter @workspace/pi-adapter test && pnpm --filter @workspace/mcp-server test",
+    "benchmark:tools": "pnpm build && node ./apps/mcp-server/scripts/benchmark.mjs"
   },
   "devDependencies": {
     "@types/node": "24.12.4",
