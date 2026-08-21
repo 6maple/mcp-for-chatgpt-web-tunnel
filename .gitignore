@@ -12,3 +12,5 @@ dist-tunnel-client/
 .corepack/
 .pnpm-store/
 .codegraph
+**/.DS_Store
+.codex

@@ -11,11 +11,13 @@
   "scripts": {
     "build": "unbuild",
     "stub": "unbuild --stub",
-    "check": "tsc -p tsconfig.json --noEmit"
+    "check": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test test/*.test.mjs"
   },
   "dependencies": {
     "@earendil-works/pi-coding-agent": "0.80.6",
-    "@workspace/types": "workspace:*"
+    "@workspace/types": "workspace:*",
+    "sharp": "^0.35.3"
   },
   "devDependencies": {
     "@types/node": "24.12.4"

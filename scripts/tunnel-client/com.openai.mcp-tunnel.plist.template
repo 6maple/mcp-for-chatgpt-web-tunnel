@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.openai.mcp-tunnel</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>__NODE_PATH__</string>
+		<string>__PROJECT_ROOT__/scripts/tunnel-client/start-cli.js</string>
+	</array>
+	<key>WorkingDirectory</key>
+	<string>__PROJECT_ROOT__</string>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>PATH</key>
+		<string>__PATH__</string>
+__PROXY_ENVIRONMENT__
+	</dict>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>KeepAlive</key>
+	<true/>
+	<key>ThrottleInterval</key>
+	<integer>10</integer>
+	<key>ProcessType</key>
+	<string>Interactive</string>
+	<key>StandardOutPath</key>
+	<string>__LOG_DIRECTORY__/openai-mcp-tunnel.out.log</string>
+	<key>StandardErrorPath</key>
+	<string>__LOG_DIRECTORY__/openai-mcp-tunnel.err.log</string>
+</dict>
+</plist>
