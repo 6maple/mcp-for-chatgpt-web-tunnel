@@ -1,0 +1,43 @@
+{
+  "name": "@workspace/mcp-tools-extra",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./loaders": {
+      "types": "./dist/loaders.d.ts",
+      "import": "./dist/loaders.mjs"
+    },
+    "./read-image": {
+      "types": "./dist/read-image.d.ts",
+      "import": "./dist/read-image.mjs"
+    },
+    "./read-many": {
+      "types": "./dist/read-many.d.ts",
+      "import": "./dist/read-many.mjs"
+    },
+    "./edit-many": {
+      "types": "./dist/edit-many.d.ts",
+      "import": "./dist/edit-many.mjs"
+    },
+    "./notify": {
+      "types": "./dist/notify.d.ts",
+      "import": "./dist/notify.mjs"
+    }
+  },
+  "scripts": {
+    "build": "unbuild",
+    "stub": "unbuild --stub",
+    "check": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.29.0",
+    "@workspace/mcp-image-adapter": "workspace:*",
+    "@workspace/mcp-tool-runtime": "workspace:*",
+    "@workspace/pi-adapter": "workspace:*",
+    "@workspace/types": "workspace:*",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "24.12.4"
+  }
+}

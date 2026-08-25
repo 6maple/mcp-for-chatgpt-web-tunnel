@@ -20,4 +20,4 @@ admin_ui:
 mcp:
   commands:
     - channel: main
-      command: pnpm start-mcp-server
+      command: pnpm start:server

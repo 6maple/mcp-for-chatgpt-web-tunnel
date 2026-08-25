@@ -14,12 +14,11 @@
     "ci": "vp check && vp run check && vp run build",
     "setup:hooks": "vp config --no-agent",
     "postinstall": "pnpm setup:hooks && turbo run stub",
-    "start-mcp-server": "pnpm --filter @workspace/mcp-server start",
-    "start-tunnel": "node ./scripts/tunnel-client/start-cli.js",
-    "install-macos-launchd": "node ./scripts/tunnel-client/install-macos-launchd.js",
-    "build-tunnel": "node ./scripts/tunnel-client/build.js",
-    "test": "pnpm build && pnpm --filter @workspace/pi-adapter test && pnpm --filter @workspace/mcp-server test",
-    "benchmark:tools": "pnpm build && node ./apps/mcp-server/scripts/benchmark.mjs"
+    "start:mcp-tunnel": "pnpm --filter @workspace/mcp-tunnel start:tunnel",
+    "start:mcp-tunnel:pm2": "pnpm --filter @workspace/mcp-tunnel start:pm2",
+    "stop:mcp-tunnel:pm2": "pnpm --filter @workspace/mcp-tunnel stop:pm2",
+    "build:mcp-tunnel": "pnpm --filter @workspace/mcp-tunnel build:tunnel",
+    "test": "pnpm build && pnpm --filter @workspace/pi-adapter test && pnpm --filter @workspace/mcp-image-adapter test && pnpm --filter @workspace/mcp-tunnel test"
   },
   "devDependencies": {
     "@types/node": "24.12.4",
