@@ -40,6 +40,8 @@ https://chatgpt.com/plugins
 
 `TOOLS_ENABLED` 未配置时只启用 `read`、`write`、`edit`、`bash`。配置为空时不暴露 tool；配置非空时仅暴露列出的 tool。扩展代码通过动态 import 加载，`read_image` 及其 `sharp` 依赖仅在显式启用时加载。
 
+`MCP_WORKSPACE_ROOT` 支持逗号分隔的目录和 glob 模式，例如 `D:/Workspace/ai-projects/*,C:/Users/Maple/.codex-cc`。相对路径以第一个匹配目录为基准，绝对路径可访问任一匹配目录内的文件。
+
 `read_image` 支持 PNG、JPEG、GIF、WebP；相对路径受 workspace 边界约束，绝对路径保留读取本机图片的兼容行为。大图会自动缩放/转 WebP。`edit_many` 按顺序执行，非原子操作。
 
 ## 启动与部署

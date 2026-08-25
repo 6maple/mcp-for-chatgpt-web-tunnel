@@ -36,20 +36,36 @@ function textOf(result: PiResult): string {
     .join('\n')
 }
 
-function assertInside(root: string, input: string): string {
+type WorkspaceRootsInput = string | readonly string[]
+
+function normalizeWorkspaceRoots(workspaceRoots: WorkspaceRootsInput): string[] {
+  const roots = (typeof workspaceRoots === 'string' ? [workspaceRoots] : workspaceRoots)
+    .map((root) => resolve(root))
+    .filter((root, index, values) => values.indexOf(root) === index)
+  if (roots.length === 0) throw new Error('at least one workspace root is required')
+  return roots
+}
+
+function isInside(root: string, target: string): boolean {
+  const rel = relative(root, target)
+  return !rel.startsWith('..') && !isAbsolute(rel)
+}
+
+function assertInside(roots: readonly string[], input: string): string {
   if (typeof input !== 'string' || input.length === 0)
     throw new Error('path must be a non-empty string')
-  const target = resolve(root, input)
-  const rel = relative(root, target)
-  if (rel.startsWith('..') || isAbsolute(rel)) throw new Error('path must be inside the workspace')
+  const target = isAbsolute(input) ? resolve(input) : resolve(roots[0]!, input)
+  if (!roots.some((root) => isInside(root, target)))
+    throw new Error('path must be inside one of the configured workspaces')
   return target
 }
 
-async function assertExistingPathInside(root: string, input: string): Promise<string> {
-  const target = assertInside(root, input)
+async function assertExistingPathInside(roots: readonly string[], input: string): Promise<string> {
+  const target = assertInside(roots, input)
   try {
     const actual = await realpath(target)
-    assertInside(await realpath(root), actual)
+    const actualRoots = await Promise.all(roots.map((root) => realpath(root)))
+    assertInside(actualRoots, actual)
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
   }
@@ -177,14 +193,15 @@ export interface PiAdapter {
 
 /** Resolve an existing path while enforcing the workspace boundary after symlink resolution. */
 export async function resolveExistingWorkspacePath(
-  workspaceRoot: string,
+  workspaceRoots: WorkspaceRootsInput,
   input: string
 ): Promise<string> {
-  return assertExistingPathInside(resolve(workspaceRoot), input)
+  return assertExistingPathInside(normalizeWorkspaceRoots(workspaceRoots), input)
 }
 
-export function createPiAdapter(workspaceRoot: string): PiAdapter {
-  const root = resolve(workspaceRoot)
+export function createPiAdapter(workspaceRoots: WorkspaceRootsInput): PiAdapter {
+  const roots = normalizeWorkspaceRoots(workspaceRoots)
+  const root = roots[0]!
   const windowsBash = process.platform === 'win32' ? powershellOperations() : undefined
   const bashTool = createBashTool(
     root,
@@ -194,7 +211,7 @@ export function createPiAdapter(workspaceRoot: string): PiAdapter {
   const editTool = createEditTool(root)
 
   const read = async (input: ReadInput): Promise<ReadResult> => {
-    const path = await assertExistingPathInside(root, input.path)
+    const path = await assertExistingPathInside(roots, input.path)
     const source = await readFile(path, 'utf8')
     const lines = source.split('\n')
     const totalLines = lines.length
@@ -218,7 +235,7 @@ export function createPiAdapter(workspaceRoot: string): PiAdapter {
         : Math.min(startLine + (content.match(/\n/g)?.length ?? 0), endLine)
 
     return {
-      path: relative(root, path),
+      path: isAbsolute(input.path) ? path : relative(root, path),
       content,
       start_line: startLine,
       end_line: actualEndLine,
@@ -228,13 +245,13 @@ export function createPiAdapter(workspaceRoot: string): PiAdapter {
   }
 
   const edit = async (input: EditInput): Promise<EditResult> => {
-    const path = await assertExistingPathInside(root, input.path)
+    const path = await assertExistingPathInside(roots, input.path)
     await access(path, constants.R_OK | constants.W_OK)
     await editTool.execute(callId(), {
       path,
       edits: [{ oldText: input.old_string, newText: input.new_string }],
     })
-    return { path: relative(root, path), matches: 1 }
+    return { path: isAbsolute(input.path) ? path : relative(root, path), matches: 1 }
   }
 
   return {
@@ -243,9 +260,12 @@ export function createPiAdapter(workspaceRoot: string): PiAdapter {
       return { results: await Promise.all(input.files.map((file) => read(file))) }
     },
     async write(input) {
-      const path = assertInside(root, input.path)
+      const path = assertInside(roots, input.path)
       await writeTool.execute(callId(), { ...input, path })
-      return { path: relative(root, path), bytes: Buffer.byteLength(input.content, 'utf8') }
+      return {
+        path: isAbsolute(input.path) ? path : relative(root, path),
+        bytes: Buffer.byteLength(input.content, 'utf8'),
+      }
     },
     edit,
     async editMany(input) {

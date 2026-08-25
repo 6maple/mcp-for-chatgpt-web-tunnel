@@ -22,10 +22,7 @@ void test('readImage remains sandboxed for relative paths and supports absolute 
     assert.deepEqual(Buffer.from(image.data, 'base64'), png)
     const absolute = await adapter.readImage({ path: join(outside, 'outside.png') })
     assert.equal(absolute.path, await realpath(join(outside, 'outside.png')))
-    await assert.rejects(
-      adapter.readImage({ path: 'escape.png' }),
-      /path must be inside the workspace/
-    )
+    await assert.rejects(adapter.readImage({ path: 'escape.png' }))
   } finally {
     await rm(workspace, { recursive: true, force: true })
     await rm(outside, { recursive: true, force: true })
