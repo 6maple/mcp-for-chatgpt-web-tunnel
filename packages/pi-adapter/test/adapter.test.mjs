@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import test from 'node:test'
 import { createPiAdapter } from '../dist/index.mjs'
 
@@ -37,5 +37,31 @@ void test('readMany preserves input order and validates line counts', async () =
     await assert.rejects(adapter.read({ path: 'one.txt', start_line: 4 }), /exceeds total_lines/)
   } finally {
     await rm(workspace, { recursive: true, force: true })
+  }
+})
+
+void test('supports absolute paths in any configured workspace root', async () => {
+  const parent = await mkdtemp(join(tmpdir(), 'pi-adapter-roots-'))
+  const first = join(parent, 'first')
+  const second = join(parent, 'second')
+  const outside = join(parent, 'outside')
+  try {
+    await Promise.all([
+      mkdir(first, { recursive: true }),
+      mkdir(second, { recursive: true }),
+      mkdir(outside, { recursive: true }),
+    ])
+    await writeFile(join(second, 'two.txt'), 'second')
+    await writeFile(join(outside, 'outside.txt'), 'outside')
+    const adapter = createPiAdapter([first, second])
+    const result = await adapter.read({ path: resolve(second, 'two.txt') })
+    assert.equal(result.path, resolve(second, 'two.txt'))
+    assert.equal(result.content, 'second')
+    await assert.rejects(
+      adapter.read({ path: resolve(outside, 'outside.txt') }),
+      /configured workspaces/
+    )
+  } finally {
+    await rm(parent, { recursive: true, force: true })
   }
 })

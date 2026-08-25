@@ -66,6 +66,19 @@ void test('extensions are opt-in and can run without core tools', async () => {
   })
 })
 
+void test('TOOLS_ENABLED registers read_image alongside core tools', async () => {
+  await withClient('read,write,edit,bash,read_image', async (client) => {
+    const tools = await client.listTools()
+    assert.deepEqual(tools.tools.map((tool) => tool.name).sort(), [
+      'bash',
+      'edit',
+      'read',
+      'read_image',
+      'write',
+    ])
+  })
+})
+
 void test('an empty allowlist exposes no tools and unknown names fail before startup', async () => {
   await withClient('', async (client) => {
     await assert.rejects(client.listTools(), /Method not found/)
