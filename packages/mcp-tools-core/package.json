@@ -1,16 +1,21 @@
 {
-  "name": "@workspace/mcp-server",
+  "name": "@workspace/mcp-tools-core",
   "private": true,
   "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs"
+    }
+  },
   "scripts": {
     "build": "unbuild",
     "stub": "unbuild --stub",
-    "check": "tsc -p tsconfig.json --noEmit",
-    "start": "node dist/index.mjs",
-    "test": "node --test test/*.test.mjs"
+    "check": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.29.0",
+    "@workspace/mcp-tool-runtime": "workspace:*",
     "@workspace/pi-adapter": "workspace:*",
     "@workspace/types": "workspace:*",
     "zod": "4.4.3"

@@ -1,5 +1,5 @@
 {
-  "name": "@workspace/pi-adapter",
+  "name": "@workspace/mcp-tool-runtime",
   "private": true,
   "type": "module",
   "exports": {
@@ -11,12 +11,10 @@
   "scripts": {
     "build": "unbuild",
     "stub": "unbuild --stub",
-    "check": "tsc -p tsconfig.json --noEmit",
-    "test": "node --test test/*.test.mjs"
+    "check": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@earendil-works/pi-coding-agent": "0.80.6",
-    "@workspace/types": "workspace:*"
+    "@modelcontextprotocol/sdk": "1.29.0"
   },
   "devDependencies": {
     "@types/node": "24.12.4"

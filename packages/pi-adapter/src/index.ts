@@ -1,15 +1,13 @@
 import { spawn } from 'node:child_process'
 import { constants } from 'node:fs'
-import { access, readFile, realpath, stat } from 'node:fs/promises'
+import { access, readFile, realpath } from 'node:fs/promises'
 import { isAbsolute, relative, resolve } from 'node:path'
-import { performance } from 'node:perf_hooks'
 import {
   createBashTool,
   createEditTool,
   createWriteTool,
   type BashOperations,
 } from '@earendil-works/pi-coding-agent'
-import sharp from 'sharp'
 import type {
   BashInput,
   BashResult,
@@ -17,23 +15,15 @@ import type {
   EditManyInput,
   EditManyResult,
   EditResult,
-  ReadImageInput,
-  ReadImageResult,
   ReadInput,
   ReadManyInput,
   ReadManyResult,
   ReadResult,
   WriteInput,
   WriteResult,
-  SupportedImageMimeType,
 } from '@workspace/types'
 
 const DEFAULT_READ_MAX_CHARS = 50_000
-const MAX_INPUT_IMAGE_BYTES = 100 * 1024 * 1024
-const MAX_TRANSMITTED_IMAGE_BYTES = 20 * 1024 * 1024
-const AUTO_COMPRESS_THRESHOLD_BYTES = 1 * 1024 * 1024
-const MAX_IMAGE_DIMENSION = 2048
-const WEBP_QUALITY = 85
 const DEFAULT_BASH_MAX_OUTPUT_CHARS = 50_000
 const MAX_RETURN_CHARS = 1_000_000
 
@@ -66,47 +56,8 @@ async function assertExistingPathInside(root: string, input: string): Promise<st
   return target
 }
 
-async function resolveImageReadPath(root: string, input: string): Promise<string> {
-  if (typeof input !== 'string' || input.length === 0)
-    throw new Error('path must be a non-empty string')
-  if (!isAbsolute(input)) return assertExistingPathInside(root, input)
-  return realpath(input)
-}
-
-function roundMs(value: number): number {
-  return Math.round(value * 100) / 100
-}
-
 function callId(): string {
   return `mcp-${Date.now()}-${Math.random().toString(36).slice(2)}`
-}
-
-function detectImageMimeType(bytes: Buffer): SupportedImageMimeType | undefined {
-  if (
-    bytes.length >= 8 &&
-    bytes[0] === 0x89 &&
-    bytes[1] === 0x50 &&
-    bytes[2] === 0x4e &&
-    bytes[3] === 0x47 &&
-    bytes[4] === 0x0d &&
-    bytes[5] === 0x0a &&
-    bytes[6] === 0x1a &&
-    bytes[7] === 0x0a
-  )
-    return 'image/png'
-  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff)
-    return 'image/jpeg'
-  if (bytes.length >= 6) {
-    const signature = bytes.toString('ascii', 0, 6)
-    if (signature === 'GIF87a' || signature === 'GIF89a') return 'image/gif'
-  }
-  if (
-    bytes.length >= 12 &&
-    bytes.toString('ascii', 0, 4) === 'RIFF' &&
-    bytes.toString('ascii', 8, 12) === 'WEBP'
-  )
-    return 'image/webp'
-  return undefined
 }
 
 function boundedPositiveInteger(value: number | undefined, fallback: number): number {
@@ -217,12 +168,19 @@ function powershellOperations(): {
 
 export interface PiAdapter {
   read(input: ReadInput): Promise<ReadResult>
-  readImage(input: ReadImageInput): Promise<ReadImageResult>
   readMany(input: ReadManyInput): Promise<ReadManyResult>
   write(input: WriteInput): Promise<WriteResult>
   edit(input: EditInput): Promise<EditResult>
   editMany(input: EditManyInput): Promise<EditManyResult>
   bash(input: BashInput): Promise<BashResult>
+}
+
+/** Resolve an existing path while enforcing the workspace boundary after symlink resolution. */
+export async function resolveExistingWorkspacePath(
+  workspaceRoot: string,
+  input: string
+): Promise<string> {
+  return assertExistingPathInside(resolve(workspaceRoot), input)
 }
 
 export function createPiAdapter(workspaceRoot: string): PiAdapter {
@@ -269,109 +227,6 @@ export function createPiAdapter(workspaceRoot: string): PiAdapter {
     }
   }
 
-  const readImage = async (input: ReadImageInput): Promise<ReadImageResult> => {
-    const startedAt = performance.now()
-
-    const resolveStartedAt = performance.now()
-    const path = await resolveImageReadPath(root, input.path)
-    const fileMetadata = await stat(path)
-    const resolveMs = performance.now() - resolveStartedAt
-
-    if (!fileMetadata.isFile()) throw new Error('read_image: path must reference a file')
-    if (fileMetadata.size > MAX_INPUT_IMAGE_BYTES)
-      throw new Error(
-        `read_image: input exceeds the 100 MiB safety limit (${fileMetadata.size} bytes)`
-      )
-
-    const readStartedAt = performance.now()
-    const originalBytes = await readFile(path)
-    const readMs = performance.now() - readStartedAt
-    const originalMimeType = detectImageMimeType(originalBytes)
-    if (originalMimeType === undefined)
-      throw new Error(
-        'read_image: unsupported or unrecognized image format; expected PNG, JPEG, GIF, or WebP'
-      )
-
-    const inspectStartedAt = performance.now()
-    let imageMetadata
-    try {
-      imageMetadata = await sharp(originalBytes, { pages: 1 }).metadata()
-    } catch (error) {
-      throw new Error(
-        `read_image: failed to decode image: ${error instanceof Error ? error.message : String(error)}`
-      )
-    }
-    const inspectMs = performance.now() - inspectStartedAt
-
-    const originalWidth = imageMetadata.width
-    const originalHeight = imageMetadata.height
-    const requiresResize =
-      (originalWidth ?? 0) > MAX_IMAGE_DIMENSION || (originalHeight ?? 0) > MAX_IMAGE_DIMENSION
-    const shouldCompress = requiresResize || originalBytes.length > AUTO_COMPRESS_THRESHOLD_BYTES
-
-    let outputBytes = originalBytes
-    let outputMimeType = originalMimeType
-    let width = originalWidth
-    let height = originalHeight
-    let compressed = false
-    let transformMs = 0
-
-    if (shouldCompress) {
-      const transformStartedAt = performance.now()
-      let pipeline = sharp(originalBytes, { pages: 1 }).rotate()
-      if (requiresResize)
-        pipeline = pipeline.resize({
-          width: MAX_IMAGE_DIMENSION,
-          height: MAX_IMAGE_DIMENSION,
-          fit: 'inside',
-          withoutEnlargement: true,
-        })
-      const transformed = await pipeline
-        .webp({ quality: WEBP_QUALITY, effort: 2 })
-        .toBuffer({ resolveWithObject: true })
-      transformMs = performance.now() - transformStartedAt
-
-      if (requiresResize || transformed.data.length < originalBytes.length) {
-        outputBytes = transformed.data
-        outputMimeType = 'image/webp'
-        width = transformed.info.width
-        height = transformed.info.height
-        compressed = true
-      }
-    }
-
-    if (outputBytes.length > MAX_TRANSMITTED_IMAGE_BYTES)
-      throw new Error(
-        `read_image: optimized image still exceeds the 20 MiB transmission limit (${outputBytes.length} bytes)`
-      )
-
-    const base64StartedAt = performance.now()
-    const data = outputBytes.toString('base64')
-    const base64Ms = performance.now() - base64StartedAt
-    const totalMs = performance.now() - startedAt
-
-    return {
-      path: isAbsolute(input.path) ? path : relative(root, path),
-      data,
-      mimeType: outputMimeType,
-      bytes: outputBytes.length,
-      originalBytes: originalBytes.length,
-      originalWidth,
-      originalHeight,
-      width,
-      height,
-      compressed,
-      metrics: {
-        resolveMs: roundMs(resolveMs),
-        readMs: roundMs(readMs),
-        inspectMs: roundMs(inspectMs),
-        transformMs: roundMs(transformMs),
-        base64Ms: roundMs(base64Ms),
-        totalMs: roundMs(totalMs),
-      },
-    }
-  }
-
   const edit = async (input: EditInput): Promise<EditResult> => {
     const path = await assertExistingPathInside(root, input.path)
     await access(path, constants.R_OK | constants.W_OK)
@@ -384,7 +239,6 @@ export function createPiAdapter(workspaceRoot: string): PiAdapter {
 
   return {
     read,
-    readImage,
     async readMany(input) {
       return { results: await Promise.all(input.files.map((file) => read(file))) }
     },

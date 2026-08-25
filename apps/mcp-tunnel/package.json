@@ -1,0 +1,27 @@
+{
+  "name": "@workspace/mcp-tunnel",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "unbuild",
+    "stub": "unbuild --stub",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test test/*.test.mjs",
+    "start:server": "node dist/index.mjs",
+    "start:tunnel": "node ./scripts/start-cli.js",
+    "start:pm2": "node ./scripts/start-pm2.js",
+    "stop:pm2": "node ./scripts/start-pm2.js stop",
+    "build:tunnel": "node ./scripts/build-tunnel.js",
+    "install:macos-launchd": "node ./scripts/platform/macos/install-launchd.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.29.0",
+    "@workspace/mcp-tool-runtime": "workspace:*",
+    "@workspace/mcp-tools-core": "workspace:*",
+    "@workspace/mcp-tools-extra": "workspace:*",
+    "@workspace/pi-adapter": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "24.12.4"
+  }
+}
