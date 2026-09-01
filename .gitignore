@@ -3,7 +3,7 @@
 .env.local
 *.key
 *.pem
-tunnel-client.exe
+tunnel-client*.exe
 .cache
 node_modules/
 dist/
