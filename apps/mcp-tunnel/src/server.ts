@@ -40,9 +40,11 @@ export async function resolveWorkspaceRoots(
     const matches: string[] = []
     if (/[*?[]/.test(pattern)) {
       for await (const match of glob(pattern)) matches.push(match)
+      if (matches.length === 0) {
+        logStartup('workspace-root-pattern-skipped', { pattern })
+        continue
+      }
     } else matches.push(pattern)
-    if (matches.length === 0)
-      throw new Error(`MCP_WORKSPACE_ROOT pattern matched no paths: ${pattern}`)
     for (const match of matches) {
       const path = resolve(match)
       if (!(await stat(path)).isDirectory()) continue

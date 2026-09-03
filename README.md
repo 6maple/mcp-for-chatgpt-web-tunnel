@@ -55,6 +55,8 @@ pnpm build:mcp-tunnel
 
 第一条命令前台启动 Tunnel。第二条命令使用全局安装的 PM2 托管该 app；第三条命令停止并移除其 PM2 记录；请先执行 `npm install --global pm2`。PM2 不属于项目依赖，也不被打入独立包。在 Windows 上，PM2 托管的 Tunnel Client 会隐藏其常驻控制台窗口；前台启动仍保留可见输出。
 
+PM2 启动脚本会自动安装并配置 `pm2-logrotate`：日志每天轮转，单文件超过 10 MB 时轮转，保留最近 7 个轮转文件并压缩旧文件。因此日志最多保留约一周；首次使用 PM2 启动需要能访问 npm registry。
+
 独立包生成在 `apps/mcp-tunnel/dist-tunnel-client/`，其中不包含 `.env.local`、Tunnel Client 二进制或 `node_modules`。将凭据和二进制放入该目录后，运行 `node start-cli.js`；若要运行 `node start-pm2.js`，宿主机同样需要全局 PM2。
 
 macOS launchd 是可选兼容层：

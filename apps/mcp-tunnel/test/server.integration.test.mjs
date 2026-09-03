@@ -11,9 +11,11 @@ import { parseEnabledToolNames } from '@workspace/mcp-tool-runtime'
 
 const serverEntry = fileURLToPath(new URL('../dist/index.mjs', import.meta.url))
 
-async function withClient(toolsEnabled, callback) {
+async function withClient(toolsEnabled, callback, workspaceRootValue) {
   const workspace = await mkdtemp(join(tmpdir(), 'mcp-server-test-'))
-  const env = { ...process.env, MCP_WORKSPACE_ROOT: workspace }
+  const configuredRoot =
+    typeof workspaceRootValue === 'function' ? workspaceRootValue(workspace) : workspaceRootValue
+  const env = { ...process.env, MCP_WORKSPACE_ROOT: configuredRoot ?? workspace }
   if (toolsEnabled !== undefined) env.TOOLS_ENABLED = toolsEnabled
   const transport = new StdioClientTransport({
     command: process.execPath,
@@ -30,6 +32,22 @@ async function withClient(toolsEnabled, callback) {
     await rm(workspace, { recursive: true, force: true })
   }
 }
+
+void test('unmatched workspace root globs are skipped when another root is valid', async () => {
+  await withClient(
+    undefined,
+    async (client) => {
+      const tools = await client.listTools()
+      assert.deepEqual(tools.tools.map((tool) => tool.name).sort(), [
+        'bash',
+        'edit',
+        'read',
+        'write',
+      ])
+    },
+    (workspace) => `${workspace},${join(workspace, 'missing-*')}`
+  )
+})
 
 void test('TOOLS_ENABLED defaults to the four core tools', async () => {
   await withClient(undefined, async (client) => {
