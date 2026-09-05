@@ -25,6 +25,8 @@ CONTROL_PLANE_API_KEY=sk-...
 # 可选；相对路径以 apps/mcp-tunnel 为基准
 TUNNEL_CLIENT_PATH=./tunnel-client.exe
 MCP_WORKSPACE_ROOT=.
+# 可选；逗号分隔的动态目录/glob 授权规则，主 root 自动包含
+MCP_WORKSPACE_ALLOWED=../shared/*,D:/Workspace/game-dev/*
 # 未配置时只启用 core；配置时仅启用列出的工具
 TOOLS_ENABLED=read,write,edit,bash,read_image,read_many,edit_many,notify
 ```
@@ -40,7 +42,7 @@ https://chatgpt.com/plugins
 
 `TOOLS_ENABLED` 未配置时只启用 `read`、`write`、`edit`、`bash`。配置为空时不暴露 tool；配置非空时仅暴露列出的 tool。扩展代码通过动态 import 加载，`read_image` 及其 `sharp` 依赖仅在显式启用时加载。
 
-`MCP_WORKSPACE_ROOT` 支持逗号分隔的目录和 glob 模式，例如 `D:/Workspace/ai-projects/*,C:/Users/Maple/.codex-cc`。相对路径以第一个匹配目录为基准，绝对路径可访问任一匹配目录内的文件。
+`MCP_WORKSPACE_ROOT` 是单一主工作区，决定相对路径和 bash 的初始目录。`MCP_WORKSPACE_ALLOWED` 是逗号分隔的动态目录/glob 授权规则，例如 `D:/Workspace/ai-projects/*,C:/Users/Maple/.codex-cc`；规则在每次请求时重新匹配，新建目录无需重启 Tunnel。主工作区自动包含在授权范围内。
 
 `read_image` 支持 PNG、JPEG、GIF、WebP；相对路径受 workspace 边界约束，绝对路径保留读取本机图片的兼容行为。大图会自动缩放/转 WebP。`edit_many` 按顺序执行，非原子操作。
 

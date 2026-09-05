@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process'
 import { constants } from 'node:fs'
-import { access, readFile, realpath } from 'node:fs/promises'
+import { access, glob, readFile, stat } from 'node:fs/promises'
 import { isAbsolute, relative, resolve } from 'node:path'
 import {
   createBashTool,
@@ -36,14 +36,18 @@ function textOf(result: PiResult): string {
     .join('\n')
 }
 
-type WorkspaceRootsInput = string | readonly string[]
-
-function normalizeWorkspaceRoots(workspaceRoots: WorkspaceRootsInput): string[] {
-  const roots = (typeof workspaceRoots === 'string' ? [workspaceRoots] : workspaceRoots)
-    .map((root) => resolve(root))
+function normalizeWorkspaceRootPatterns(
+  workspaceRoot: string,
+  workspaceAllowed?: string | readonly string[]
+): string[] {
+  const allowed =
+    typeof workspaceAllowed === 'string' ? workspaceAllowed.split(',') : (workspaceAllowed ?? [])
+  const patterns = [workspaceRoot, ...allowed]
+    .map((root) => root.trim())
+    .filter(Boolean)
     .filter((root, index, values) => values.indexOf(root) === index)
-  if (roots.length === 0) throw new Error('at least one workspace root is required')
-  return roots
+  if (patterns.length === 0) throw new Error('at least one workspace root is required')
+  return patterns
 }
 
 function isInside(root: string, target: string): boolean {
@@ -51,25 +55,42 @@ function isInside(root: string, target: string): boolean {
   return !rel.startsWith('..') && !isAbsolute(rel)
 }
 
-function assertInside(roots: readonly string[], input: string): string {
+async function resolveWorkspaceRoots(patterns: readonly string[]): Promise<string[]> {
+  const roots: string[] = []
+  for (const pattern of patterns) {
+    const matches: string[] = []
+    if (/[*?[]/.test(pattern)) {
+      for await (const match of glob(pattern)) matches.push(match)
+    } else matches.push(pattern)
+    for (const match of matches) {
+      try {
+        const path = resolve(match)
+        if (!(await stat(path)).isDirectory()) continue
+        if (!roots.includes(path)) roots.push(path)
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+      }
+    }
+  }
+  return roots
+}
+
+async function assertInside(patterns: readonly string[], input: string): Promise<string> {
   if (typeof input !== 'string' || input.length === 0)
     throw new Error('path must be a non-empty string')
+  const roots = await resolveWorkspaceRoots(patterns)
+  if (roots.length === 0) throw new Error('no configured workspace currently exists')
   const target = isAbsolute(input) ? resolve(input) : resolve(roots[0]!, input)
   if (!roots.some((root) => isInside(root, target)))
     throw new Error('path must be inside one of the configured workspaces')
   return target
 }
 
-async function assertExistingPathInside(roots: readonly string[], input: string): Promise<string> {
-  const target = assertInside(roots, input)
-  try {
-    const actual = await realpath(target)
-    const actualRoots = await Promise.all(roots.map((root) => realpath(root)))
-    assertInside(actualRoots, actual)
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
-  }
-  return target
+async function assertExistingPathInside(
+  patterns: readonly string[],
+  input: string
+): Promise<string> {
+  return assertInside(patterns, input)
 }
 
 function callId(): string {
@@ -191,17 +212,24 @@ export interface PiAdapter {
   bash(input: BashInput): Promise<BashResult>
 }
 
-/** Resolve an existing path while enforcing the workspace boundary after symlink resolution. */
+/** Resolve a path while enforcing the configured lexical workspace boundary. */
 export async function resolveExistingWorkspacePath(
-  workspaceRoots: WorkspaceRootsInput,
-  input: string
+  workspaceRoot: string,
+  input: string,
+  workspaceAllowed?: string | readonly string[]
 ): Promise<string> {
-  return assertExistingPathInside(normalizeWorkspaceRoots(workspaceRoots), input)
+  return assertExistingPathInside(
+    normalizeWorkspaceRootPatterns(workspaceRoot, workspaceAllowed),
+    input
+  )
 }
 
-export function createPiAdapter(workspaceRoots: WorkspaceRootsInput): PiAdapter {
-  const roots = normalizeWorkspaceRoots(workspaceRoots)
-  const root = roots[0]!
+export function createPiAdapter(
+  workspaceRoot: string,
+  workspaceAllowed?: string | readonly string[]
+): PiAdapter {
+  const patterns = normalizeWorkspaceRootPatterns(workspaceRoot, workspaceAllowed)
+  const root = resolve(workspaceRoot)
   const windowsBash = process.platform === 'win32' ? powershellOperations() : undefined
   const bashTool = createBashTool(
     root,
@@ -211,7 +239,7 @@ export function createPiAdapter(workspaceRoots: WorkspaceRootsInput): PiAdapter 
   const editTool = createEditTool(root)
 
   const read = async (input: ReadInput): Promise<ReadResult> => {
-    const path = await assertExistingPathInside(roots, input.path)
+    const path = await assertExistingPathInside(patterns, input.path)
     const source = await readFile(path, 'utf8')
     const lines = source.split('\n')
     const totalLines = lines.length
@@ -245,7 +273,7 @@ export function createPiAdapter(workspaceRoots: WorkspaceRootsInput): PiAdapter 
   }
 
   const edit = async (input: EditInput): Promise<EditResult> => {
-    const path = await assertExistingPathInside(roots, input.path)
+    const path = await assertExistingPathInside(patterns, input.path)
     await access(path, constants.R_OK | constants.W_OK)
     await editTool.execute(callId(), {
       path,
@@ -260,7 +288,7 @@ export function createPiAdapter(workspaceRoots: WorkspaceRootsInput): PiAdapter 
       return { results: await Promise.all(input.files.map((file) => read(file))) }
     },
     async write(input) {
-      const path = assertInside(roots, input.path)
+      const path = await assertInside(patterns, input.path)
       await writeTool.execute(callId(), { ...input, path })
       return {
         path: isAbsolute(input.path) ? path : relative(root, path),

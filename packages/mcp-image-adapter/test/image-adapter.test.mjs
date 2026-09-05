@@ -6,7 +6,7 @@ import test from 'node:test'
 import sharp from 'sharp'
 import { createImageAdapter } from '../dist/index.mjs'
 
-void test('readImage remains sandboxed for relative paths and supports absolute images', async () => {
+void test('readImage supports workspace symlinks and absolute images', async () => {
   const workspace = await mkdtemp(join(tmpdir(), 'image-adapter-test-'))
   const outside = await mkdtemp(join(tmpdir(), 'image-adapter-outside-'))
   try {
@@ -22,7 +22,8 @@ void test('readImage remains sandboxed for relative paths and supports absolute 
     assert.deepEqual(Buffer.from(image.data, 'base64'), png)
     const absolute = await adapter.readImage({ path: join(outside, 'outside.png') })
     assert.equal(absolute.path, await realpath(join(outside, 'outside.png')))
-    await assert.rejects(adapter.readImage({ path: 'escape.png' }))
+    const linked = await adapter.readImage({ path: 'escape.png' })
+    assert.deepEqual(Buffer.from(linked.data, 'base64'), png)
   } finally {
     await rm(workspace, { recursive: true, force: true })
     await rm(outside, { recursive: true, force: true })

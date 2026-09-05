@@ -1,2 +1,2 @@
-import { resolveWorkspaceRoots, startServer } from './server.js'
-await startServer(await resolveWorkspaceRoots())
+import { resolveWorkspaceRoot, startServer } from './server.js'
+await startServer(await resolveWorkspaceRoot())

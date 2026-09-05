@@ -1,4 +1,4 @@
-import { glob, readFile, realpath, stat } from 'node:fs/promises'
+import { readFile, stat } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
@@ -23,50 +23,32 @@ function logStartup(event: string, details: Record<string, unknown>): void {
 }
 
 /**
- * Resolve comma-separated directory paths or glob patterns from MCP_WORKSPACE_ROOT.
- * Relative file paths use the first resolved root; absolute paths may use any resolved root.
+ * Resolve the single primary workspace root. Additional dynamic allow rules come from
+ * MCP_WORKSPACE_ALLOWED and are resolved by the adapter for each request.
  */
-export async function resolveWorkspaceRoots(
+export async function resolveWorkspaceRoot(
   value = process.env.MCP_WORKSPACE_ROOT
-): Promise<string[]> {
-  const patterns = (value ?? process.cwd())
-    .split(',')
-    .map((pattern) => pattern.trim())
-    .filter(Boolean)
-  if (patterns.length === 0) throw new Error('MCP_WORKSPACE_ROOT must contain at least one path')
-
-  const roots: string[] = []
-  for (const pattern of patterns) {
-    const matches: string[] = []
-    if (/[*?[]/.test(pattern)) {
-      for await (const match of glob(pattern)) matches.push(match)
-      if (matches.length === 0) {
-        logStartup('workspace-root-pattern-skipped', { pattern })
-        continue
-      }
-    } else matches.push(pattern)
-    for (const match of matches) {
-      const path = resolve(match)
-      if (!(await stat(path)).isDirectory()) continue
-      const canonical = await realpath(path)
-      if (!roots.includes(canonical)) roots.push(canonical)
-    }
-  }
-  if (roots.length === 0) throw new Error('MCP_WORKSPACE_ROOT did not resolve to any directories')
-  return roots
+): Promise<string> {
+  const root = (value ?? process.cwd()).trim()
+  if (!root) throw new Error('MCP_WORKSPACE_ROOT must contain a path')
+  const path = resolve(root)
+  const metadata = await stat(path)
+  if (!metadata.isDirectory()) throw new Error('MCP_WORKSPACE_ROOT must reference a directory')
+  logStartup('workspace-root', { root: path })
+  return path
 }
 
 export async function createServer(
-  workspaceRoots: string | readonly string[],
-  adapter: PiAdapter = createPiAdapter(workspaceRoots),
+  workspaceRoot: string,
+  workspaceAllowed = process.env.MCP_WORKSPACE_ALLOWED,
+  adapter: PiAdapter = createPiAdapter(workspaceRoot, workspaceAllowed),
   enabledTools = parseEnabledToolNames(
     process.env.TOOLS_ENABLED,
     CORE_TOOL_NAMES,
     Object.keys(EXTRA_TOOL_LOADERS)
   )
 ): Promise<McpServer> {
-  const roots = typeof workspaceRoots === 'string' ? [workspaceRoots] : [...workspaceRoots]
-  logStartup('tool-selection', { enabledTools: [...enabledTools], workspaceRoots: roots })
+  logStartup('tool-selection', { enabledTools: [...enabledTools], workspaceRoot, workspaceAllowed })
   const server = new McpServer(
     { name: 'workspace-file-tools', version: '2.4.0' },
     enabledTools.has('notify')
@@ -82,8 +64,8 @@ export async function createServer(
     if (!loader) continue
     try {
       const registration = await loader({
-        workspaceRoot: roots[0]!,
-        workspaceRoots: roots,
+        workspaceRoot,
+        workspaceAllowed,
         adapter,
         windowsScriptSource: defaultWindowsScriptSource,
       })
@@ -102,7 +84,7 @@ export async function createServer(
   return server
 }
 
-export async function startServer(workspaceRoots: string | readonly string[]): Promise<void> {
-  const server = await createServer(workspaceRoots)
+export async function startServer(workspaceRoot: string): Promise<void> {
+  const server = await createServer(workspaceRoot)
   await server.connect(new StdioServerTransport())
 }

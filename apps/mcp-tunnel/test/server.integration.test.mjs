@@ -11,11 +11,15 @@ import { parseEnabledToolNames } from '@workspace/mcp-tool-runtime'
 
 const serverEntry = fileURLToPath(new URL('../dist/index.mjs', import.meta.url))
 
-async function withClient(toolsEnabled, callback, workspaceRootValue) {
+async function withClient(toolsEnabled, callback, workspaceRootValue, workspaceAllowedValue) {
   const workspace = await mkdtemp(join(tmpdir(), 'mcp-server-test-'))
   const configuredRoot =
     typeof workspaceRootValue === 'function' ? workspaceRootValue(workspace) : workspaceRootValue
-  const env = { ...process.env, MCP_WORKSPACE_ROOT: configuredRoot ?? workspace }
+  const env = {
+    ...process.env,
+    MCP_WORKSPACE_ROOT: configuredRoot ?? workspace,
+    ...(workspaceAllowedValue ? { MCP_WORKSPACE_ALLOWED: workspaceAllowedValue(workspace) } : {}),
+  }
   if (toolsEnabled !== undefined) env.TOOLS_ENABLED = toolsEnabled
   const transport = new StdioClientTransport({
     command: process.execPath,
@@ -33,7 +37,7 @@ async function withClient(toolsEnabled, callback, workspaceRootValue) {
   }
 }
 
-void test('unmatched workspace root globs are skipped when another root is valid', async () => {
+void test('unmatched allowed globs are tolerated when the root is valid', async () => {
   await withClient(
     undefined,
     async (client) => {
@@ -45,7 +49,18 @@ void test('unmatched workspace root globs are skipped when another root is valid
         'write',
       ])
     },
+    undefined,
     (workspace) => `${workspace},${join(workspace, 'missing-*')}`
+  )
+})
+
+void test('rejects a missing primary workspace root during startup', async () => {
+  await assert.rejects(
+    withClient(
+      undefined,
+      async () => undefined,
+      (workspace) => join(workspace, 'missing')
+    )
   )
 })
 

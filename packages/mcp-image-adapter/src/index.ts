@@ -37,10 +37,11 @@ export interface ImageAdapter {
   readImage(input: ReadImageInput): Promise<ReadImageResult>
 }
 
-export function createImageAdapter(workspaceRoots: string | readonly string[]): ImageAdapter {
-  const roots = typeof workspaceRoots === 'string' ? [workspaceRoots] : [...workspaceRoots]
-  if (roots.length === 0) throw new Error('at least one workspace root is required')
-  const root = resolve(roots[0]!)
+export function createImageAdapter(
+  workspaceRoot: string,
+  workspaceAllowed = process.env.MCP_WORKSPACE_ALLOWED
+): ImageAdapter {
+  const root = resolve(workspaceRoot)
   return {
     async readImage(input) {
       const startedAt = performance.now()
@@ -49,7 +50,7 @@ export function createImageAdapter(workspaceRoots: string | readonly string[]): 
         throw new Error('path must be a non-empty string')
       const path = isAbsolute(input.path)
         ? await realpath(input.path)
-        : await resolveExistingWorkspacePath(roots, input.path)
+        : await resolveExistingWorkspacePath(workspaceRoot, input.path, workspaceAllowed)
       const metadata = await stat(path)
       const resolveMs = performance.now() - resolveStartedAt
       if (!metadata.isFile()) throw new Error('read_image: path must reference a file')
