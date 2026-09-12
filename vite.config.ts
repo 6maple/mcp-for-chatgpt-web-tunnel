@@ -8,6 +8,8 @@ const generatedPaths = [
   '.pnpm-store/**',
   '.corepack/**',
   '.codegraph/**',
+  '.brain-source/**',
+  'vendor/**',
   '**/*.exe',
   '.claude/**',
   '.mcp.json',

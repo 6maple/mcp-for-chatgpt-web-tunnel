@@ -25,8 +25,8 @@ jobs:
           node-version: '24'
           cache: true
 
-      - name: Install dependencies
-        run: vp install --frozen-lockfile
+      - name: Initialize Brain and install dependencies
+        run: node scripts/init-brain.mjs
 
       - name: Vite Plus quality check
         run: vp check

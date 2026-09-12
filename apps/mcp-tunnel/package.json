@@ -19,7 +19,8 @@
     "@workspace/mcp-tool-runtime": "workspace:*",
     "@workspace/mcp-tools-core": "workspace:*",
     "@workspace/mcp-tools-extra": "workspace:*",
-    "@workspace/pi-adapter": "workspace:*"
+    "@workspace/pi-adapter": "workspace:*",
+    "brain": "link:../../.brain-source"
   },
   "devDependencies": {
     "@types/node": "24.12.4"

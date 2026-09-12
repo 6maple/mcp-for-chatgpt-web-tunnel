@@ -44,6 +44,9 @@ importers:
       '@workspace/pi-adapter':
         specifier: workspace:*
         version: link:../../packages/pi-adapter
+      brain:
+        specifier: link:../../.brain-source
+        version: link:../../.brain-source
     devDependencies:
       '@types/node':
         specifier: 24.12.4

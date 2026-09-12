@@ -14,3 +14,4 @@ dist-tunnel-client/
 .codegraph
 **/.DS_Store
 .codex
+.brain-source

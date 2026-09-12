@@ -6,6 +6,12 @@ import { compactResult, failureResult, type ToolRegistration } from '@workspace/
 const execFileAsync = promisify(execFile)
 const DEFAULT_TITLE = 'ChatGPT'
 const DEFAULT_MESSAGE = '任务已完成'
+const notifyOutputSchema = z.strictObject({
+  notified: z.literal(true),
+  platform: z.enum(['macOS', 'Windows']),
+  title: z.string(),
+  message: z.string(),
+})
 export type WindowsScriptSource = () => Promise<string>
 export interface NotificationCommand {
   command: string
@@ -96,6 +102,7 @@ export function createNotifyTool(notifier: DesktopNotifier): ToolRegistration {
             title: z.string().max(80).optional(),
             message: z.string().max(240).optional(),
           }),
+          outputSchema: notifyOutputSchema,
           annotations: {
             destructiveHint: false,
             idempotentHint: false,

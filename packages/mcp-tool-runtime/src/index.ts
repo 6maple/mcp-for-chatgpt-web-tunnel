@@ -5,9 +5,13 @@ export interface ToolRegistration {
   register(server: McpServer): void
 }
 
-export function compactResult(value: unknown): { content: Array<{ type: 'text'; text: string }> } {
+export function compactResult(value: object): {
+  content: Array<{ type: 'text'; text: string }>
+  structuredContent: Record<string, unknown>
+} {
   return {
     content: [{ type: 'text', text: typeof value === 'string' ? value : JSON.stringify(value) }],
+    structuredContent: value as Record<string, unknown>,
   }
 }
 

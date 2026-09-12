@@ -6,6 +6,7 @@ import { build } from 'esbuild'
 const scriptsDirectory = path.dirname(fileURLToPath(import.meta.url))
 const appRoot = path.resolve(scriptsDirectory, '..')
 const projectRoot = path.resolve(appRoot, '..', '..')
+const brainRoot = path.resolve(projectRoot, '.brain-source')
 const outputDirectory = path.join(appRoot, 'dist-tunnel-client')
 const outputEnvFile = path.join(outputDirectory, '.env.local')
 const preservedEnv = fs.existsSync(outputEnvFile) ? fs.readFileSync(outputEnvFile) : undefined
@@ -68,6 +69,8 @@ const aliases = {
     'src',
     'index.ts'
   ),
+  'brain/shared': path.join(brainRoot, 'src', 'shared.ts'),
+  'brain/public-tools': path.join(brainRoot, 'src', 'public-tools.ts'),
 }
 
 fs.rmSync(outputDirectory, { recursive: true, force: true })
@@ -117,11 +120,17 @@ await build({
 })
 
 const normalizedRoot = projectRoot.replaceAll('\\', '/')
+const normalizedBrainRoot = brainRoot.replaceAll('\\', '/')
 for (const filename of fs.readdirSync(outputDirectory, { recursive: true })) {
   const candidate = path.join(outputDirectory, filename)
   if (!candidate.endsWith('.mjs')) continue
   const source = fs.readFileSync(candidate, 'utf8')
-  if (source.includes(normalizedRoot) || source.includes(projectRoot))
+  if (
+    source.includes(normalizedRoot) ||
+    source.includes(projectRoot) ||
+    source.includes(normalizedBrainRoot) ||
+    source.includes(brainRoot)
+  )
     throw new Error(`MCP bundle contains a development path: ${candidate}`)
 }
 if (fs.existsSync(path.join(outputDirectory, 'node_modules')))

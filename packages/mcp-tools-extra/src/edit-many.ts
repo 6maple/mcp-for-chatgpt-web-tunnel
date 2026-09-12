@@ -8,6 +8,9 @@ const editInputSchema = z.strictObject({
   old_string: z.string(),
   new_string: z.string(),
 })
+const editManyOutputSchema = z.strictObject({
+  results: z.array(z.strictObject({ path: z.string(), matches: z.number().int().positive() })),
+})
 export function createEditManyTool(adapter: PiAdapter): ToolRegistration {
   return {
     name: 'edit_many',
@@ -18,6 +21,7 @@ export function createEditManyTool(adapter: PiAdapter): ToolRegistration {
           description:
             'Apply multiple exact string replacements sequentially in one tool call. This operation is not atomic: earlier edits remain if a later edit fails.',
           inputSchema: z.strictObject({ edits: z.array(editInputSchema).min(1).max(50) }),
+          outputSchema: editManyOutputSchema,
         },
         async (args) => {
           try {

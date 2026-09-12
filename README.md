@@ -29,6 +29,10 @@ MCP_WORKSPACE_ROOT=.
 MCP_WORKSPACE_ALLOWED=../shared/*,D:/Workspace/game-dev/*
 # 未配置时只启用 core；配置时仅启用列出的工具
 TOOLS_ENABLED=read,write,edit,bash,read_image,read_many,edit_many,notify
+# 可选；启用 Brain，默认只暴露恢复和读取工具
+BRAIN_ENABLED=true
+# read / write；write 额外开放 cognition mutation tools
+BRAIN_ACCESS=read
 ```
 
 https://platform.openai.com/settings/organization/tunnels
@@ -41,6 +45,8 @@ https://chatgpt.com/plugins
 本地启动后在这里添加plugins
 
 `TOOLS_ENABLED` 未配置时只启用 `read`、`write`、`edit`、`bash`。配置为空时不暴露 tool；配置非空时仅暴露列出的 tool。扩展代码通过动态 import 加载，`read_image` 及其 `sharp` 依赖仅在显式启用时加载。
+
+`BRAIN_ENABLED=true` 会把 Brain 绑定到单一主工作区 `MCP_WORKSPACE_ROOT`。Brain session 优先使用 Tunnel 请求 `_meta["openai/session"]` 的 SHA-256 摘要生成 `chatgpt-web-<hash>`；该字段缺失或为空时回退到 `chatgpt-web-mcp-tunnel`。原始 `openai/session` 不会写入 Brain 路径或诊断日志。`MCP_WORKSPACE_ALLOWED` 不会切换 Brain project。`BRAIN_ACCESS` 默认为 `read`，暴露 `brain_think` 和 Brain 读取工具；设为 `write` 后额外开放 cognition 写入、编辑、移动、删除和 feedback 工具。
 
 `MCP_WORKSPACE_ROOT` 是单一主工作区，决定相对路径和 bash 的初始目录。`MCP_WORKSPACE_ALLOWED` 是逗号分隔的动态目录/glob 授权规则，例如 `D:/Workspace/ai-projects/*,C:/Users/Maple/.codex-cc`；规则在每次请求时重新匹配，新建目录无需重启 Tunnel。主工作区自动包含在授权范围内。
 
@@ -70,6 +76,22 @@ pnpm --filter @workspace/mcp-tunnel install:macos-launchd
 它只在登录时调用 PM2 驱动脚本，实际常驻与重启由 PM2 管理。
 
 ## 开发与验证
+
+首次使用先初始化 Brain。脚本会读取 `apps/mcp-tunnel/.env.local`。未配置本地路径时会将
+`vendor/ai-toolkit` 更新到 `.gitmodules` 配置分支（当前为 `main`）的最新提交；配置
+`BRAIN_SOURCE_ROOT` 时直接使用指定的 Brain package 目录，不更新 submodule：
+
+```powershell
+# 默认使用 submodule
+pnpm init:brain
+
+# 本地联调时先在 apps/mcp-tunnel/.env.local 中配置：
+# BRAIN_SOURCE_ROOT=D:/Workspace/ai-projects/ai-toolkit/code/brain
+pnpm init:brain
+```
+
+初始化会验证 Brain 入口、生成可运行的开发 stub 并安装两边依赖。当前处于快速迭代阶段，
+每次使用默认 submodule 来源执行初始化时都会跟进配置分支的最新提交。
 
 ```powershell
 pnpm stub

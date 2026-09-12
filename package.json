@@ -12,6 +12,7 @@
     "lint:fix": "vp lint --fix --type-aware",
     "quality": "vp check",
     "ci": "vp check && vp run check && vp run build",
+    "init:brain": "node scripts/init-brain.mjs",
     "setup:hooks": "vp config --no-agent",
     "postinstall": "pnpm setup:hooks && turbo run stub",
     "start:mcp-tunnel": "pnpm --filter @workspace/mcp-tunnel start:tunnel",

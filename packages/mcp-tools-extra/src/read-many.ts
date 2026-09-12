@@ -10,6 +10,18 @@ const readInputSchema = z.strictObject({
   line_count: positiveInteger.max(1_000_000).optional(),
   max_chars: positiveInteger.max(1_000_000).optional(),
 })
+const readManyOutputSchema = z.strictObject({
+  results: z.array(
+    z.strictObject({
+      path: z.string(),
+      content: z.string(),
+      start_line: positiveInteger,
+      end_line: z.number().int().nonnegative(),
+      total_lines: z.number().int().nonnegative(),
+      truncated: z.boolean(),
+    })
+  ),
+})
 export function createReadManyTool(adapter: PiAdapter): ToolRegistration {
   return {
     name: 'read_many',
@@ -20,6 +32,7 @@ export function createReadManyTool(adapter: PiAdapter): ToolRegistration {
           description:
             'Read multiple workspace text files in one tool call. Each item supports the same start line, line count, and character limit as read.',
           inputSchema: z.strictObject({ files: z.array(readInputSchema).min(1).max(50) }),
+          outputSchema: readManyOutputSchema,
         },
         async (args) => {
           try {

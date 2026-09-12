@@ -1,0 +1,4 @@
+[submodule "vendor/ai-toolkit"]
+	path = vendor/ai-toolkit
+	url = https://github.com/6maple/ai-toolkit.git
+	branch = main

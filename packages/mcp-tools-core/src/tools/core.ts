@@ -16,6 +16,28 @@ const editInputSchema = z.strictObject({
   old_string: z.string(),
   new_string: z.string(),
 })
+const readOutputSchema = z.strictObject({
+  path: z.string(),
+  content: z.string(),
+  start_line: positiveInteger,
+  end_line: z.number().int().nonnegative(),
+  total_lines: z.number().int().nonnegative(),
+  truncated: z.boolean(),
+})
+const writeOutputSchema = z.strictObject({
+  path: z.string(),
+  bytes: z.number().int().nonnegative(),
+})
+const editOutputSchema = z.strictObject({
+  path: z.string(),
+  matches: z.number().int().positive(),
+})
+const bashOutputSchema = z.strictObject({
+  exit_code: z.number().int().nullable(),
+  stdout: z.string(),
+  stderr: z.string(),
+  truncated: z.boolean(),
+})
 
 function tool(name: string, register: ToolRegistration['register']): ToolRegistration {
   return { name, register }
@@ -30,6 +52,7 @@ export function createCoreToolRegistrations(adapter: PiAdapter): ToolRegistratio
           description:
             'Read a text file inside the workspace. start_line is 1-based; line_count limits returned lines. Results default to at most 50,000 characters.',
           inputSchema: readInputSchema,
+          outputSchema: readOutputSchema,
         },
         async (args) => {
           try {
@@ -46,6 +69,7 @@ export function createCoreToolRegistrations(adapter: PiAdapter): ToolRegistratio
         {
           description: 'Create or overwrite a text file inside the workspace.',
           inputSchema: z.strictObject({ path: z.string(), content: z.string() }),
+          outputSchema: writeOutputSchema,
         },
         async (args) => {
           try {
@@ -62,6 +86,7 @@ export function createCoreToolRegistrations(adapter: PiAdapter): ToolRegistratio
         {
           description: 'Replace one exact string inside a workspace file.',
           inputSchema: editInputSchema,
+          outputSchema: editOutputSchema,
         },
         async (args) => {
           try {
@@ -83,6 +108,7 @@ export function createCoreToolRegistrations(adapter: PiAdapter): ToolRegistratio
             timeout_ms: positiveInteger.optional(),
             max_output_chars: positiveInteger.max(1_000_000).optional(),
           }),
+          outputSchema: bashOutputSchema,
         },
         async (args) => {
           try {
