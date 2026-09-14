@@ -28,6 +28,8 @@ async function withClient(
   delete env.MCP_WORKSPACE_ALLOWED
   delete env.BRAIN_ENABLED
   delete env.BRAIN_ACCESS
+  delete env.MCP_EXTERNAL_MCP_FILE
+  delete env.MCP_INSTRUCTIONS_FILE
   Object.assign(env, {
     MCP_WORKSPACE_ROOT: configuredRoot ?? workspace,
     ...(workspaceAllowedValue ? { MCP_WORKSPACE_ALLOWED: workspaceAllowedValue(workspace) } : {}),
@@ -50,6 +52,27 @@ async function withClient(
     await rm(workspace, { recursive: true, force: true })
   }
 }
+
+void test('server exposes a configured instructions file together with notify guidance', async () => {
+  const instructionsDir = await mkdtemp(join(tmpdir(), 'mcp-instructions-test-'))
+  const instructionsFile = join(instructionsDir, 'protocol.md')
+  await writeFile(instructionsFile, 'Follow the shared development protocol before starting work.')
+  try {
+    await withClient(
+      'read,notify',
+      async (client) => {
+        const instructions = client.getInstructions()
+        assert.match(instructions ?? '', /Follow the shared development protocol/)
+        assert.match(instructions ?? '', /call the notify tool exactly once/)
+      },
+      undefined,
+      undefined,
+      { MCP_INSTRUCTIONS_FILE: instructionsFile }
+    )
+  } finally {
+    await rm(instructionsDir, { recursive: true, force: true })
+  }
+})
 
 void test('unmatched allowed globs are tolerated when the root is valid', async () => {
   await withClient(

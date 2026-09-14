@@ -64,10 +64,11 @@ if (!fs.existsSync(executable)) {
       if (!child.killed) child.kill(signal)
     })
   child.on('exit', (code, signal) => {
-    process.exitCode = code ?? (signal ? 1 : 0)
+    // PM2 keeps an IPC handle open; explicit exit lets it observe and restart a dead Tunnel Client.
+    process.exit(code ?? (signal ? 1 : 0))
   })
   child.on('error', (error) => {
     console.error(`Unable to start Tunnel Client: ${error.message}`)
-    process.exitCode = 1
+    process.exit(1)
   })
 }
