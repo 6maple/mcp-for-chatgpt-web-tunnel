@@ -26,7 +26,7 @@ function runPm2(args, options = {}) {
 }
 
 function ensureLogRotation() {
-  const modules = runPm2(['module:list'], { capture: true })
+  const modules = runPm2(['ls'], { capture: true })
   if (modules.error) throw modules.error
   const moduleOutput = `${modules.stdout ?? ''}\n${modules.stderr ?? ''}`
   if (!/pm2-logrotate\b/.test(moduleOutput)) {
