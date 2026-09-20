@@ -20,20 +20,45 @@ function runPm2(args, options = {}) {
   return spawnSync(pm2, args, {
     cwd: appRoot,
     stdio: options.capture ? ['ignore', 'pipe', 'pipe'] : 'inherit',
-    shell: process.platform === 'win32',
     encoding: 'utf8',
   })
 }
 
-function ensureLogRotation() {
-  const modules = runPm2(['module:list'], { capture: true })
-  if (modules.error) throw modules.error
-  const moduleOutput = `${modules.stdout ?? ''}\n${modules.stderr ?? ''}`
-  if (!/pm2-logrotate\b/.test(moduleOutput)) {
+function getPm2Processes() {
+  const result = runPm2(['jlist'], { capture: true })
+  if (result.error) throw result.error
+  if (result.status !== 0) {
+    throw new Error(`Unable to query PM2 processes: ${result.stderr?.trim() || 'unknown error'}`)
+  }
+
+  try {
+    return JSON.parse(result.stdout ?? '[]')
+  } catch {
+    throw new Error('Unable to parse PM2 process list')
+  }
+}
+
+function findLogRotationModule(processes) {
+  return processes.find(
+    (process) => process.name === 'pm2-logrotate' && process.pm2_env?.pmx_module === true
+  )
+}
+
+function isProcessOnline(processes, name) {
+  return processes.some((process) => process.name === name && process.pm2_env?.status === 'online')
+}
+
+function ensureLogRotation(processes) {
+  let logRotation = findLogRotationModule(processes)
+  if (!logRotation) {
     const installed = runPm2(['install', 'pm2-logrotate'])
     if (installed.status !== 0)
       throw new Error('Unable to install PM2 log rotation module (pm2-logrotate)')
+    processes = getPm2Processes()
+    logRotation = findLogRotationModule(processes)
+    if (!logRotation) throw new Error('PM2 log rotation module did not start after installation')
   }
+
   const settings = [
     ['max_size', '10M'],
     ['retain', '7'],
@@ -42,10 +67,14 @@ function ensureLogRotation() {
     ['rotateInterval', '0 0 * * *'],
   ]
   for (const [key, value] of settings) {
+    if (String(logRotation.pm2_env?.[key] ?? '') === value) continue
+
     const configured = runPm2(['set', `pm2-logrotate:${key}`, value])
     if (configured.status !== 0)
       throw new Error(`Unable to configure PM2 log rotation setting: ${key}`)
   }
+
+  return processes
 }
 
 const args =
@@ -54,8 +83,13 @@ const args =
     : ['delete', 'mcp-tunnel']
 let result
 try {
-  if (action === 'start') ensureLogRotation()
-  result = runPm2(args)
+  if (action === 'start') {
+    const processes = ensureLogRotation(getPm2Processes())
+    if (isProcessOnline(processes, 'mcp-tunnel')) {
+      console.log('[PM2] App [mcp-tunnel] is already online')
+      result = { status: 0 }
+    } else result = runPm2(args)
+  } else result = runPm2(args)
 } catch (error) {
   console.error(
     `Unable to configure PM2: ${error instanceof Error ? error.message : String(error)}`

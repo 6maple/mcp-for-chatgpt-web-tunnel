@@ -13,5 +13,6 @@ dist-tunnel-client/
 .pnpm-store/
 .codegraph
 **/.DS_Store
+.vscode/settings.json
 .codex
 .brain-source

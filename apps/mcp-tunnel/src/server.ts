@@ -12,6 +12,7 @@ import {
   type ToolRegistration,
 } from '@workspace/mcp-tool-runtime'
 import {
+  BRAIN_EXPLICIT_RESTORE_INSTRUCTIONS,
   createProductionBrainServices,
   parseSessionId,
   registerBrainTools,
@@ -126,10 +127,7 @@ export function resolveBrainConfiguration(
 
 function serverInstructions(brain: BrainConfiguration, notifyEnabled: boolean): string | undefined {
   const instructions: string[] = []
-  if (brain.enabled)
-    instructions.push(
-      'Immediately after each new user message, call brain_think exactly once before substantive interpretation, planning, responding, or calling another tool. Use its returned context as current working cognition for the turn.'
-    )
+  if (brain.enabled) instructions.push(BRAIN_EXPLICIT_RESTORE_INSTRUCTIONS)
   if (notifyEnabled)
     instructions.push(
       'When a user task is fully complete, call the notify tool exactly once as the final tool call before returning the final answer. Do not notify for intermediate progress updates.'
