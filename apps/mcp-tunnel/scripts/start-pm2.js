@@ -7,8 +7,8 @@ const scriptsDirectory = path.dirname(fileURLToPath(import.meta.url))
 const ecosystem = path.join(scriptsDirectory, 'ecosystem.config.cjs')
 const pm2 = 'pm2'
 const action = process.argv[2] ?? 'start'
-if (!['start', 'stop'].includes(action)) {
-  console.error(`Unknown PM2 action: ${action}. Expected start or stop.`)
+if (!['start', 'restart', 'stop'].includes(action)) {
+  console.error(`Unknown PM2 action: ${action}. Expected start, restart, or stop.`)
   process.exitCode = 1
   process.exit()
 }
@@ -78,14 +78,14 @@ function ensureLogRotation(processes) {
 }
 
 const args =
-  action === 'start'
-    ? ['startOrReload', ecosystem, '--only', 'mcp-tunnel', '--update-env']
-    : ['delete', 'mcp-tunnel']
+  action === 'stop'
+    ? ['delete', 'mcp-tunnel']
+    : ['startOrReload', ecosystem, '--only', 'mcp-tunnel', '--update-env']
 let result
 try {
-  if (action === 'start') {
+  if (action === 'start' || action === 'restart') {
     const processes = ensureLogRotation(getPm2Processes())
-    if (isProcessOnline(processes, 'mcp-tunnel')) {
+    if (action === 'start' && isProcessOnline(processes, 'mcp-tunnel')) {
       console.log('[PM2] App [mcp-tunnel] is already online')
       result = { status: 0 }
     } else result = runPm2(args)

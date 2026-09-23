@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict'
-import { createHash } from 'node:crypto'
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
@@ -22,7 +21,8 @@ async function withClient(
   const workspace = await mkdtemp(join(tmpdir(), 'mcp-server-test-'))
   const configuredRoot =
     typeof workspaceRootValue === 'function' ? workspaceRootValue(workspace) : workspaceRootValue
-  const configuredEnv = typeof envOverrides === 'function' ? envOverrides(workspace) : envOverrides
+  const configuredEnv =
+    typeof envOverrides === 'function' ? await envOverrides(workspace) : envOverrides
   const env = { ...process.env }
   delete env.TOOLS_ENABLED
   delete env.MCP_WORKSPACE_ALLOWED
@@ -144,7 +144,7 @@ void test('TOOLS_ENABLED registers read_image alongside core tools', async () =>
   })
 })
 
-void test('Brain read access binds to OpenAI session metadata with a fallback session', async () => {
+void test('Brain read access restores the configured Global and Project cognition', async () => {
   await withClient(
     '',
     async (client) => {
@@ -158,25 +158,10 @@ void test('Brain read access binds to OpenAI session metadata with a fallback se
         'brain_think',
       ])
 
-      for (const _meta of [undefined, { 'openai/session': '' }]) {
-        const fallbackResult = await client.callTool({ name: 'brain_think', arguments: {}, _meta })
-        assert.equal(fallbackResult.content[0].type, 'text')
-        assert.match(
-          fallbackResult.content[0].text,
-          /path="@session\/chatgpt-web-mcp-tunnel\/core\.md"/
-        )
-      }
-
-      for (const openAiSession of ['v1/test-session-a', 'v1/test-session-b']) {
-        const sessionId = `chatgpt-web-${createHash('sha256').update(openAiSession).digest('hex')}`
-        const result = await client.callTool({
-          name: 'brain_think',
-          arguments: {},
-          _meta: { 'openai/session': openAiSession },
-        })
-        assert.equal(result.content[0].type, 'text')
-        assert.match(result.content[0].text, new RegExp(`path="@session/${sessionId}/core\\.md"`))
-      }
+      const result = await client.callTool({ name: 'brain_think', arguments: {} })
+      assert.equal(result.content[0].type, 'text')
+      assert.match(result.content[0].text, /path="@global\/core\.md"/)
+      assert.match(result.content[0].text, /path="@project\/core\.md"/)
     },
     undefined,
     undefined,
@@ -186,6 +171,52 @@ void test('Brain read access binds to OpenAI session metadata with a fallback se
       HOME: workspace,
       USERPROFILE: workspace,
     })
+  )
+})
+
+void test('Brain semantic config keeps think guidance and the public tool surface aligned', async () => {
+  await withClient(
+    '',
+    async (client) => {
+      const tools = await client.listTools()
+      assert.deepEqual(tools.tools.map((tool) => tool.name).sort(), [
+        'brain_absolute_path',
+        'brain_ask_search',
+        'brain_cat',
+        'brain_glob',
+        'brain_grep',
+        'brain_ls',
+        'brain_think',
+      ])
+
+      const think = await client.callTool({ name: 'brain_think', arguments: {} })
+      assert.equal(think.content[0].type, 'text')
+      assert.match(think.content[0].text, /## Active Semantic Recall/)
+      assert.match(think.content[0].text, /brain_ask_search/)
+
+      const search = await client.callTool({
+        name: 'brain_ask_search',
+        arguments: { query: 'relevant past cognition' },
+      })
+      assert.equal(search.isError, true)
+      assert.match(search.content[0].text, /semantic-search-unavailable/)
+    },
+    undefined,
+    undefined,
+    async (workspace) => {
+      const brainHome = join(workspace, '.brain-data')
+      await mkdir(brainHome, { recursive: true })
+      await writeFile(
+        join(brainHome, 'config.json'),
+        JSON.stringify({ semanticSearch: { enabled: true } })
+      )
+      return {
+        BRAIN_ENABLED: 'true',
+        BRAIN_ACCESS: 'read',
+        HOME: workspace,
+        USERPROFILE: workspace,
+      }
+    }
   )
 })
 

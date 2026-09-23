@@ -17,6 +17,7 @@
     "postinstall": "pnpm setup:hooks && turbo run stub",
     "start:mcp-tunnel": "pnpm --filter @workspace/mcp-tunnel start:tunnel",
     "start:mcp-tunnel:pm2": "pnpm --filter @workspace/mcp-tunnel start:pm2",
+    "restart:mcp-tunnel:pm2": "pnpm --filter @workspace/mcp-tunnel restart:pm2",
     "stop:mcp-tunnel:pm2": "pnpm --filter @workspace/mcp-tunnel stop:pm2",
     "build:mcp-tunnel": "pnpm --filter @workspace/mcp-tunnel build:tunnel",
     "test": "pnpm build && pnpm --filter @workspace/pi-adapter test && pnpm --filter @workspace/mcp-image-adapter test && pnpm --filter @workspace/mcp-tunnel test"

@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto'
 import { readFile, stat } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
@@ -13,15 +12,15 @@ import {
 } from '@workspace/mcp-tool-runtime'
 import {
   BRAIN_EXPLICIT_RESTORE_INSTRUCTIONS,
+  DEFAULT_BRAIN_HOME,
   createProductionBrainServices,
-  parseSessionId,
+  loadBrainGlobalConfig,
   registerBrainTools,
   type BrainApplicationServices,
-  type HostInvocationAdapter,
+  type BrainRuntimeFeatures,
 } from 'brain/shared'
-import { BRAIN_TOOL_NAMES, type BrainToolName } from 'brain/public-tools'
+import { selectPublicBrainTools, type BrainToolName } from 'brain/public-tools'
 
-const CHATGPT_WEB_MCP_TUNNEL_SESSION_ID = parseSessionId('chatgpt-web-mcp-tunnel')
 const BRAIN_MUTATION_TOOL_NAMES: readonly BrainToolName[] = [
   'brain_write',
   'brain_edit',
@@ -29,86 +28,6 @@ const BRAIN_MUTATION_TOOL_NAMES: readonly BrainToolName[] = [
   'brain_mv',
   'brain_feedback',
 ]
-const HOST_SESSION_META_KEYS = [
-  'threadId',
-  'thread_id',
-  'conversationId',
-  'conversation_id',
-  'sessionId',
-  'session_id',
-  'openai/session',
-] as const
-
-function scalarMetadata(value: unknown): string | number | boolean | undefined {
-  return typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'
-    ? value
-    : undefined
-}
-
-function hashSessionValue(value: string): string {
-  return createHash('sha256').update(value).digest('hex')
-}
-
-function summarizeSessionMetadata(value: unknown): unknown {
-  const scalar = scalarMetadata(value)
-  if (typeof scalar !== 'string') return scalar
-  return {
-    length: scalar.length,
-    sha256: hashSessionValue(scalar).slice(0, 16),
-  }
-}
-
-function invocationMetadata(extra: unknown): Record<string, unknown> | undefined {
-  if (typeof extra !== 'object' || extra === null) return undefined
-  const meta = (extra as Record<string, unknown>)._meta
-  return typeof meta === 'object' && meta !== null ? (meta as Record<string, unknown>) : undefined
-}
-
-function resolveBrainSessionId(extra: unknown) {
-  const openAiSession = invocationMetadata(extra)?.['openai/session']
-  if (typeof openAiSession !== 'string' || openAiSession.trim().length === 0)
-    return CHATGPT_WEB_MCP_TUNNEL_SESSION_ID
-  return parseSessionId(`chatgpt-web-${hashSessionValue(openAiSession)}`)
-}
-
-function logHostInvocationMetadata(extra: unknown, brainSessionId: string): void {
-  if (typeof extra !== 'object' || extra === null) {
-    logStartup('brain-host-invocation', {
-      extraType: typeof extra,
-      brainSessionId,
-      sessionSource: 'fallback',
-    })
-    return
-  }
-  const record = extra as Record<string, unknown>
-  const meta = invocationMetadata(extra)
-  const candidates = Object.fromEntries(
-    HOST_SESSION_META_KEYS.flatMap((key) => {
-      const value = summarizeSessionMetadata(meta?.[key])
-      return value === undefined ? [] : [[key, value]]
-    })
-  )
-  logStartup('brain-host-invocation', {
-    sessionId: scalarMetadata(record.sessionId),
-    requestId: scalarMetadata(record.requestId),
-    metaKeys: meta === undefined ? [] : Object.keys(meta).sort(),
-    metaSessionCandidates: candidates,
-    brainSessionId,
-    sessionSource:
-      typeof meta?.['openai/session'] === 'string' && meta['openai/session'].trim().length > 0
-        ? 'openai/session'
-        : 'fallback',
-  })
-}
-
-const CHATGPT_WEB_HOST_INVOCATION: HostInvocationAdapter = {
-  currentSessionId: (extra) => {
-    const brainSessionId = resolveBrainSessionId(extra)
-    logHostInvocationMetadata(extra, brainSessionId)
-    return brainSessionId
-  },
-}
-
 export interface BrainConfiguration {
   readonly enabled: boolean
   readonly access: 'read' | 'write'
@@ -173,7 +92,8 @@ export async function createServer(
   ),
   brain = resolveBrainConfiguration(),
   createBrainServices: (
-    sourceRoot: string
+    sourceRoot: string,
+    options?: { readonly features?: BrainRuntimeFeatures }
   ) => Promise<BrainApplicationServices> = createProductionBrainServices
 ): Promise<McpServer> {
   logStartup('tool-selection', {
@@ -214,15 +134,23 @@ export async function createServer(
     .map((registration) => registration.name)
   if (brain.enabled) {
     const excluded = brain.access === 'read' ? BRAIN_MUTATION_TOOL_NAMES : []
-    registerBrainTools(
-      server,
-      await createBrainServices(workspaceRoot),
-      CHATGPT_WEB_HOST_INVOCATION,
-      {
-        exclude: excluded,
-      }
+    const globalConfig = loadBrainGlobalConfig(DEFAULT_BRAIN_HOME)
+    for (const diagnostic of globalConfig.diagnostics)
+      logStartup('brain-config-diagnostic', {
+        code: diagnostic.code,
+        message: diagnostic.message,
+      })
+    const features = globalConfig.features
+    const brainServices = await createBrainServices(workspaceRoot, { features })
+    registerBrainTools(server, brainServices, {
+      exclude: excluded,
+      features,
+    })
+    registeredTools.push(
+      ...selectPublicBrainTools(features)
+        .map((tool) => tool.name)
+        .filter((name) => !excluded.includes(name))
     )
-    registeredTools.push(...BRAIN_TOOL_NAMES.filter((name) => !excluded.includes(name)))
   }
   logStartup('tools-registered', { tools: registeredTools })
   return server
