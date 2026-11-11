@@ -20,6 +20,7 @@ import {
   type BrainRuntimeFeatures,
 } from 'brain/shared'
 import { selectPublicBrainTools, type BrainToolName } from 'brain/public-tools'
+import { createBrainInvocation } from './brain-invocation.js'
 
 const BRAIN_MUTATION_TOOL_NAMES: readonly BrainToolName[] = [
   'brain_write',
@@ -142,7 +143,8 @@ export async function createServer(
       })
     const features = globalConfig.features
     const brainServices = await createBrainServices(workspaceRoot, { features })
-    registerBrainTools(server, brainServices, {
+    const invocation = createBrainInvocation(workspaceRoot)
+    registerBrainTools(invocation.registrar(server), brainServices, {
       exclude: excluded,
       features,
     })

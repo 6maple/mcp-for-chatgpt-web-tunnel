@@ -98,6 +98,13 @@ fs.writeFileSync(
 )
 if (preservedEnv !== undefined) fs.writeFileSync(outputEnvFile, preservedEnv)
 
+// The bundled Brain Step module reads these resources relative to import.meta.url.
+const brainGuidance = path.join(brainRoot, 'step', 'guidance')
+const bundleGuidance = path.join(outputDirectory, 'guidance')
+fs.mkdirSync(bundleGuidance, { recursive: true })
+for (const name of ['tool-definition.json', 'delivery-rules.md'])
+  fs.copyFileSync(path.join(brainGuidance, name), path.join(bundleGuidance, name))
+
 await build({
   entryPoints: { 'mcp-server': path.join(appRoot, 'src', 'index.ts') },
   outdir: outputDirectory,

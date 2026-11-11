@@ -62,9 +62,12 @@ function validateBrainRoot(brainRoot) {
     'src/shared.ts',
     'src/public-tools.ts',
     'src/runtime/production.ts',
+    'step/index.mjs',
   ]) {
     if (!fs.existsSync(path.join(brainRoot, relativePath)))
-      throw new Error(`Brain entry not found: ${path.join(brainRoot, relativePath)}`)
+      throw new Error(
+        `Brain entry not found: ${path.join(brainRoot, relativePath)}. Use BRAIN_SOURCE_ROOT with a current Brain checkout or update vendor/ai-toolkit.`
+      )
   }
   const sharedSource = fs.readFileSync(path.join(brainRoot, 'src', 'shared.ts'), 'utf8')
   for (const exportedName of ['createProductionBrainServices', 'registerBrainTools']) {
