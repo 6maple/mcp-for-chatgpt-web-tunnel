@@ -2,7 +2,7 @@
 
 一个 Turborepo monorepo：`mcp-tunnel` 将本地 stdio MCP 服务通过 OpenAI Tunnel Client 暴露给工作区。核心工具与可选扩展均以 workspace package 提供，未来可新增独立的 `apps/mcp-*` 组合应用。
 
-ChatGPT plugin 通过 MCP `tools/list` 获取返回契约：`read`、`write`、`edit`、`bash`、`read_many`、`edit_many`、`read_image` 和 `notify` 声明各自业务对象的 `outputSchema`，成功结果在 `structuredContent` 中提供匹配的字段。图片 schema 描述元数据，图片本身通过 `content` 传输。Brain cognition 工具和 `brain_step` 直接通过 `content` 返回文本；`brain_step` 返回当前 Markdown 任务或 State 正文，没有 `outputSchema` 和 `structuredContent`。失败使用 `isError: true` 和错误文本，无需伪造成功对象。
+ChatGPT plugin 通过 MCP `tools/list` 获取返回契约：`read`、`write`、`edit`、`bash`、`read_many`、`edit_many`、`read_image` 和 `notify` 声明各自业务对象的 `outputSchema`，成功结果在 `structuredContent` 中提供匹配的字段。图片 schema 描述元数据，图片本身通过 `content` 传输。Brain cognition 工具和 `brain_step` 直接通过 `content` 返回文本；`brain_step` 的第一段内容返回任务 Markdown 或 State 正文，第二段返回本轮 `turnId`。失败使用 `isError: true` 和错误文本，无需伪造成功对象。
 
 ## 架构
 
@@ -48,11 +48,13 @@ https://chatgpt.com/plugins
 
 `TOOLS_ENABLED` 未配置时只启用 `read`、`write`、`edit`、`bash`。配置为空时不暴露 tool；配置非空时仅暴露列出的 tool。扩展代码通过动态 import 加载，`read_image` 及其 `sharp` 依赖仅在显式启用时加载。
 
-`BRAIN_ENABLED=true` 会把 Brain cognition 绑定到单一主工作区 `MCP_WORKSPACE_ROOT`；`MCP_WORKSPACE_ALLOWED` 不会切换 Brain project。`BRAIN_ACCESS` 默认为 `read`，暴露 `brain_think`、读取工具和只维护流程工作状态的 `brain_step`；设为 `write` 后额外开放 cognition 写入、编辑、移动、删除和 feedback 工具。
+`BRAIN_ENABLED=true` 会把 Brain cognition 绑定到单一主工作区 `MCP_WORKSPACE_ROOT`；`MCP_WORKSPACE_ALLOWED` 不会切换 Brain project。`BRAIN_ACCESS` 默认为 `read`，暴露读取工具和只维护流程工作状态的 `brain_step`；设为 `write` 后额外开放 cognition 写入、编辑、移动、删除和 feedback 工具。
 
-`brain_step` 的会话来自请求 `_meta["openai/session"]`，仅保存 SHA-256 摘要。ChatGPT 官方未提供稳定的轮次字段，因此沿用显式恢复约定：每条新用户消息先调用一次 `brain_think`；恢复成功后，宿主保存新的轮次绑定，后续 `brain_step` 读取该绑定。再次成功调用 `brain_think` 会开始新轮次，不应在同一轮重复调用。绑定保存在主工作区 `.brain-working/mcp-tunnel-invocations/`，进程更换后仍可继续。Brain 在 `.brain-working/brain-step/` 保存单轮 State：JSON 管理流程状态并通过 `contentFile` 引用 Markdown 正文，`read()` 返回该 Markdown，`update(edits)` 使用 Pi edit 修改。模型按 `start`、`submit_work`、`submit_review`、`confirm_review`、`update`、`read` 六个动作推进。缺少会话标识或本轮恢复失败时，`brain_step` 拒绝执行并保留原 State，不以固定身份或请求 ID 回退。普通 cognition 工具继续使用配置的工作区。客户端元数据说明见 [官方 reference](https://developers.openai.com/plugins/reference/#_meta-fields-the-client-provides)。
+每条新用户消息用 `brain_step.start(message)` 直接进入 Background + Goal，并保存返回的 `turnId`。同一轮后续请求传回这个 ID。带相同 ID 和原消息的 `start` 返回当前任务。每次省略 ID 的 `start` 都建立独立 State，即使用户原文相同。
 
-本地源码开发更新使用 `pnpm init:brain` 选择并 stub Brain，再运行 `pnpm stub` 生成各 workspace 的源码入口，最后 `pnpm restart:mcp-tunnel:pm2` 重启已安装服务。`BRAIN_SOURCE_ROOT` 指向本地 checkout 时不更新 vendor submodule。服务更新后，在 ChatGPT 刷新连接的工具定义并开启新会话。
+Brain 在主工作区的 `.brain-working/brain-step/` 保存单轮 State。JSON 记录轮次 ID、流程状态和 Markdown 正文的位置，进程更换后仍可继续。`read` 返回正文，`update` 使用 Pi edit 修改。六个动作及四阶段推进方式见 [Brain Step](vendor/ai-toolkit/code/brain/step/README.md)。普通 cognition 工具使用配置的主工作区。
+
+Step 需要支持 `turnId` 的 Brain 版本。本地源码开发更新使用 `pnpm init:brain` 选择并 stub Brain，再运行 `pnpm stub` 生成各 workspace 的源码入口，最后 `pnpm restart:mcp-tunnel:pm2` 重启已安装服务。`BRAIN_SOURCE_ROOT` 指向本地 checkout 时不更新 vendor submodule。服务更新后，在 ChatGPT 刷新连接的工具定义并开启新会话。
 
 `MCP_WORKSPACE_ROOT` 是单一主工作区，决定相对路径和 bash 的初始目录。`MCP_WORKSPACE_ALLOWED` 是逗号分隔的动态目录/glob 授权规则，例如 `D:/Workspace/ai-projects/*,C:/Users/Maple/.codex-cc`；规则在每次请求时重新匹配，新建目录无需重启 Tunnel。主工作区自动包含在授权范围内。
 
@@ -72,6 +74,8 @@ pnpm build:mcp-tunnel
 PM2 启动脚本会自动安装并配置 `pm2-logrotate`：日志每天轮转，单文件超过 10 MB 时轮转，保留最近 7 个轮转文件并压缩旧文件。因此日志最多保留约一周；首次使用 PM2 启动需要能访问 npm registry。
 
 独立包生成在 `apps/mcp-tunnel/dist-tunnel-client/`，其中不包含 `.env.local`、Tunnel Client 二进制或 `node_modules`。将凭据和二进制放入该目录后，运行 `node start-cli.js`；若要运行 `node start-pm2.js`，宿主机同样需要全局 PM2。
+
+使用独立包且在 `TOOLS_ENABLED` 中启用了 `read_image` 时，在目标机器的 `dist-tunnel-client` 父目录安装 sharp。当前锁定版本为 0.35.3，可在该父目录运行 `npm install --save-exact --include=optional sharp@0.35.3`。安装后再启动独立包。sharp 随目标平台选择原生依赖。
 
 macOS launchd 是可选兼容层：
 

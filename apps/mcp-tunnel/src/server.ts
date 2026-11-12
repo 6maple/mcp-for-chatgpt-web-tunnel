@@ -20,7 +20,6 @@ import {
   type BrainRuntimeFeatures,
 } from 'brain/shared'
 import { selectPublicBrainTools, type BrainToolName } from 'brain/public-tools'
-import { createBrainInvocation } from './brain-invocation.js'
 
 const BRAIN_MUTATION_TOOL_NAMES: readonly BrainToolName[] = [
   'brain_write',
@@ -134,7 +133,8 @@ export async function createServer(
     .filter((registration) => enabledTools.has(registration.name))
     .map((registration) => registration.name)
   if (brain.enabled) {
-    const excluded = brain.access === 'read' ? BRAIN_MUTATION_TOOL_NAMES : []
+    const excluded: BrainToolName[] = ['brain_think']
+    if (brain.access === 'read') excluded.push(...BRAIN_MUTATION_TOOL_NAMES)
     const globalConfig = loadBrainGlobalConfig(DEFAULT_BRAIN_HOME)
     for (const diagnostic of globalConfig.diagnostics)
       logStartup('brain-config-diagnostic', {
@@ -143,8 +143,7 @@ export async function createServer(
       })
     const features = globalConfig.features
     const brainServices = await createBrainServices(workspaceRoot, { features })
-    const invocation = createBrainInvocation(workspaceRoot)
-    registerBrainTools(invocation.registrar(server), brainServices, {
+    registerBrainTools(server, brainServices, {
       exclude: excluded,
       features,
     })

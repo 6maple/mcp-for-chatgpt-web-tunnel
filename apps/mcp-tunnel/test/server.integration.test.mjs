@@ -10,10 +10,9 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { createDesktopNotifier, createNotifyTool } from '@workspace/mcp-tools-extra/notify'
 import { parseEnabledToolNames } from '@workspace/mcp-tool-runtime'
-import { createBrainInvocation } from '../src/brain-invocation.ts'
-import { createFileRuntime, statePathFor } from 'brain/step'
 
-const serverEntry = fileURLToPath(new URL('../dist/index.mjs', import.meta.url))
+const serverEntry =
+  process.env.MCP_TEST_SERVER_ENTRY ?? fileURLToPath(new URL('../dist/index.mjs', import.meta.url))
 
 async function withClient(
   toolsEnabled,
@@ -266,7 +265,7 @@ void test('TOOLS_ENABLED registers read_image alongside core tools', async () =>
   })
 })
 
-void test('Brain read access restores the configured Global and Project cognition', async () => {
+void test('Brain read access exposes Step and reads the configured Global and Project cognition', async () => {
   await withClient(
     '',
     async (client) => {
@@ -278,15 +277,9 @@ void test('Brain read access restores the configured Global and Project cognitio
         'brain_grep',
         'brain_ls',
         'brain_step',
-        'brain_think',
       ])
 
-      const result = await client.callTool({ name: 'brain_think', arguments: {} })
       for (const tool of tools.tools) assert.equal(tool.outputSchema, undefined, tool.name)
-      assert.equal(result.structuredContent, undefined)
-      assert.notEqual(result.isError, true)
-      assert.equal(result.content[0].type, 'text')
-      assert.match(result.content[0].text, /@brain-virtual\/deep\.md/)
       const memory = await client.callTool({
         name: 'brain_cat',
         arguments: { path: '@brain-virtual/deep-memory.md' },
@@ -306,7 +299,7 @@ void test('Brain read access restores the configured Global and Project cognitio
   )
 })
 
-void test('Brain semantic config keeps think guidance and the public tool surface aligned', async () => {
+void test('Brain semantic config aligns memory guidance and the public tool surface', async () => {
   await withClient(
     '',
     async (client) => {
@@ -319,14 +312,9 @@ void test('Brain semantic config keeps think guidance and the public tool surfac
         'brain_grep',
         'brain_ls',
         'brain_step',
-        'brain_think',
       ])
 
-      const think = await client.callTool({ name: 'brain_think', arguments: {} })
       for (const tool of tools.tools) assert.equal(tool.outputSchema, undefined, tool.name)
-      assert.equal(think.structuredContent, undefined)
-      assert.equal(think.content[0].type, 'text')
-      assert.notEqual(think.isError, true)
       const memory = await client.callTool({
         name: 'brain_cat',
         arguments: { path: '@brain-virtual/deep-memory.md' },
@@ -359,76 +347,54 @@ void test('Brain semantic config keeps think guidance and the public tool surfac
   )
 })
 
-void test('Brain step binds restored conversations and preserves Markdown State across MCP processes', async () => {
+void test('Brain Step uses issued IDs across MCP processes and isolates identical messages', async () => {
   await withClient(
     '',
     async (client, workspace) => {
-      const meta = { 'openai/session': 'private-conversation-a' }
-      const call = (name, args, requestMeta = meta, target = client) =>
-        target.callTool({ name, arguments: args, _meta: requestMeta })
-      const step = (args, requestMeta = meta, target = client) =>
-        call('brain_step', args, requestMeta, target)
-      const successText = (response) => {
+      const step = (args, target = client) =>
+        target.callTool({ name: 'brain_step', arguments: args })
+      const success = (response, turnId) => {
         assert.notEqual(response.isError, true, response.content?.[0]?.text)
         assert.equal(response.structuredContent, undefined)
         assert.equal(response.content[0].type, 'text')
-        return response.content[0].text
+        const returnedId = response.content[1]?.text.match(/[0-9a-f-]{36}/)?.[0]
+        assert.ok(returnedId, 'the model can read the turn ID from the response')
+        if (turnId) assert.equal(returnedId, turnId)
+        return { text: response.content[0].text, turnId: returnedId }
       }
 
-      const before = await step({ action: 'start', message: 'round one' })
-      assert.equal(before.isError, true)
-      assert.match(before.content[0].text, /brain_think/)
-
-      assert.notEqual((await call('brain_think', {})).isError, true)
-      const deep = await call('brain_cat', { path: '@brain-virtual/deep.md' })
-      assert.notEqual(deep.isError, true)
-      assert.match(deep.content[0].text, /think-workflow/)
-
-      const started = successText(await step({ action: 'start', message: 'round one' }))
-      assert.match(started, /# Brain 的背景与目的/)
-      assert.match(started, /# 当前任务：查清用户的完整意图/)
-      const submitted = successText(
-        await step({ action: 'submit_work', result: 'status: “Plan A” works.' })
+      const request = { action: 'start', message: 'same user message' }
+      const first = success(await step(request))
+      const second = success(await step(request))
+      assert.match(first.text, /Background \+ Goal \/ Work/)
+      assert.notEqual(first.turnId, second.turnId)
+      const { turnId } = first
+      assert.match(
+        success(await step({ action: 'submit_work', turnId, result: 'Plan A works.' }), turnId)
+          .text,
+        /\/ Review/
       )
-      assert.match(submitted, /完整客观检视/)
-      const correction = successText(
-        await step({ action: 'submit_review', result: 'Plan A 应改为 Plan B' })
+      assert.match(
+        success(
+          await step({ action: 'submit_review', turnId, result: 'Change Plan A to Plan B.' }),
+          turnId
+        ).text,
+        /\/ Fix/
       )
-      assert.match(correction, /当前任务：修正完整意图/)
-      assert.equal(
-        successText(
-          await step({
-            action: 'update',
-            edits: [{ old_text: '"Plan A" works', new_text: 'Plan B works' }],
-          })
-        ),
-        '更新已保存。'
+      success(
+        await step({
+          action: 'update',
+          turnId,
+          edits: [{ old_text: 'Plan A', new_text: 'Plan B' }],
+        }),
+        turnId
       )
-      const currentText = successText(await step({ action: 'read' }))
-      assert.match(currentText, /Plan B works/)
-      assert.doesNotMatch(currentText, /Plan A/)
-
-      const stateDirectory = join(workspace, '.brain-working', 'brain-step')
-      const stateFiles = (await readdir(stateDirectory)).filter((name) => name.endsWith('.json'))
-      assert.equal(stateFiles.length, 1)
-      const stateFile = join(stateDirectory, stateFiles[0])
-      const original = await readFile(stateFile, 'utf8')
-      const json = JSON.parse(original)
-      assert.equal(json.state.mode, 'fix')
-      assert.match(json.state.contentFile, /\.md$/)
-      assert.equal(json.state.content, undefined)
-      assert.equal(
-        await readFile(join(stateDirectory, json.state.contentFile), 'utf8'),
-        currentText
+      const current = success(await step({ action: 'read', turnId }), turnId).text
+      assert.match(current, /Plan B works/)
+      assert.doesNotMatch(
+        success(await step({ action: 'read', turnId: second.turnId }), second.turnId).text,
+        /Plan B works/
       )
-      assert.doesNotMatch(original, /Plan B works/)
-
-      const duplicate = successText(await step({ action: 'start', message: 'round one' }))
-      assert.match(duplicate, /当前任务：修正完整意图/)
-      const missing = await step({ action: 'start', message: 'no identity' }, {})
-      assert.equal(missing.isError, true)
-      assert.match(missing.content[0].text, /openai\/session/)
-      assert.equal(await readFile(stateFile, 'utf8'), original)
 
       const replacement = new Client({ name: 'replacement', version: '1.0.0' })
       const transport = new StdioClientTransport({
@@ -447,51 +413,37 @@ void test('Brain step binds restored conversations and preserves Markdown State 
       })
       try {
         await replacement.connect(transport)
-        assert.equal(successText(await step({ action: 'read' }, meta, replacement)), currentText)
-        assert.match(
-          successText(await step({ action: 'submit_work' }, meta, replacement)),
-          /完整客观检视/
-        )
-        assert.match(
-          successText(await step({ action: 'submit_review' }, meta, replacement)),
-          /简短确认/
-        )
-        assert.match(
-          successText(await step({ action: 'confirm_review' }, meta, replacement)),
-          /事实本质/
-        )
-
-        const other = { 'openai/session': 'private-conversation-b' }
-        assert.notEqual((await call('brain_think', {}, other, replacement)).isError, true)
-        assert.match(
-          successText(await step({ action: 'start', message: 'separate' }, other, replacement)),
-          /查清用户的完整意图/
-        )
         assert.equal(
-          (await readdir(stateDirectory)).filter((name) => name.endsWith('.json')).length,
-          2
+          success(await step({ action: 'read', turnId }, replacement), turnId).text,
+          current
         )
-        assert.match(successText(await step({ action: 'read' }, other, replacement)), /当前 State/)
-        assert.equal((await readFile(stateFile, 'utf8')) !== original, true) // Progress was saved.
-        assert.match(successText(await step({ action: 'read' }, meta, replacement)), /Plan B works/)
-
-        assert.notEqual((await call('brain_think', {}, meta, replacement)).isError, true)
-        assert.equal((await step({ action: 'read' }, meta, replacement)).isError, true)
         assert.match(
-          successText(await step({ action: 'start', message: 'round two' }, meta, replacement)),
-          /查清用户的完整意图/
+          success(await step({ ...request, turnId }, replacement), turnId).text,
+          /\/ Fix/
         )
-        assert.doesNotMatch(
-          successText(await step({ action: 'read' }, meta, replacement)),
-          /Plan B/
+        assert.match(
+          success(await step({ action: 'submit_work', turnId }, replacement), turnId).text,
+          /\/ Review/
         )
-        assert.notEqual(await readFile(stateFile, 'utf8'), original)
-
-        const bindings = join(workspace, '.brain-working', 'mcp-tunnel-invocations')
-        for (const name of await readdir(bindings)) {
-          assert.doesNotMatch(name, /private-conversation/)
-          assert.doesNotMatch(await readFile(join(bindings, name), 'utf8'), /private-conversation/)
+        assert.match(
+          success(await step({ action: 'submit_review', turnId }, replacement), turnId).text,
+          /\/ Confirm/
+        )
+        assert.match(
+          success(await step({ action: 'confirm_review', turnId }, replacement), turnId).text,
+          /Method \/ Work/
+        )
+        for (const invalid of [
+          { action: 'read' },
+          { action: 'read', turnId: 'host-session' },
+          { action: 'read', turnId: '00000000-0000-4000-8000-000000000000' },
+        ]) {
+          const response = await step(invalid, replacement)
+          assert.equal(response.isError, true)
+          assert.match(response.content[0].text, /turnId/)
         }
+        const files = await readdir(join(workspace, '.brain-working', 'brain-step'))
+        assert.equal(files.filter((name) => name.endsWith('.json')).length, 2)
       } finally {
         await replacement.close()
       }
@@ -505,50 +457,6 @@ void test('Brain step binds restored conversations and preserves Markdown State 
       USERPROFILE: workspace,
     })
   )
-})
-
-void test('failed restore invalidates the old host turn without touching thinking State', async () => {
-  const workspace = await mkdtemp(join(tmpdir(), 'brain-turn-failure-'))
-  try {
-    const invocation = createBrainInvocation(workspace)
-    const callbacks = new Map()
-    const registrar = invocation.registrar({
-      registerTool(name, _config, callback) {
-        callbacks.set(name, callback)
-        return {}
-      },
-    })
-    let fail = false
-    registrar.registerTool('brain_think', {}, async () =>
-      fail
-        ? { isError: true, content: [{ type: 'text', text: 'restore failed' }] }
-        : { content: [{ type: 'text', text: 'restored' }] }
-    )
-    const extra = { _meta: { 'openai/session': 'conversation', progressToken: 'keep-metadata' } }
-    const think = callbacks.get('brain_think')
-    await think({}, extra)
-    const bound = await invocation.host(extra)
-    assert.ok(bound.turnId)
-    registrar.registerTool('brain_step', {}, async (_args, forwarded) => {
-      assert.equal(forwarded._meta.progressToken, 'keep-metadata')
-      assert.equal(forwarded._meta.threadId, bound.conversationId)
-      assert.equal(forwarded._meta.turnId, bound.turnId)
-      return { content: [{ type: 'text', text: 'forwarded' }] }
-    })
-    assert.notEqual((await callbacks.get('brain_step')({}, extra)).isError, true)
-    const runtime = createFileRuntime({ resolveHost: () => invocation.host(extra) })
-    await (await runtime(extra)).execute({ action: 'start', message: 'preserved work' })
-    const state = statePathFor(bound)
-    const original = await readFile(state, 'utf8')
-    fail = true
-    assert.equal((await think({}, extra)).isError, true)
-    assert.equal((await invocation.host(extra)).turnId, '')
-    assert.equal((await callbacks.get('brain_step')({}, extra)).isError, true)
-    await assert.rejects(runtime(extra), /turnId/)
-    assert.equal(await readFile(state, 'utf8'), original)
-  } finally {
-    await rm(workspace, { recursive: true, force: true })
-  }
 })
 
 void test('an empty allowlist exposes no tools and unknown names fail before startup', async () => {

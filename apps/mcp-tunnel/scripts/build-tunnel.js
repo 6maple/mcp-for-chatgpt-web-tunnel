@@ -71,6 +71,7 @@ const aliases = {
   ),
   'brain/shared': path.join(brainRoot, 'src', 'shared.ts'),
   'brain/public-tools': path.join(brainRoot, 'src', 'public-tools.ts'),
+  'brain/step': path.join(brainRoot, 'step', 'index.mjs'),
 }
 
 fs.rmSync(outputDirectory, { recursive: true, force: true })
@@ -102,8 +103,11 @@ if (preservedEnv !== undefined) fs.writeFileSync(outputEnvFile, preservedEnv)
 const brainGuidance = path.join(brainRoot, 'step', 'guidance')
 const bundleGuidance = path.join(outputDirectory, 'guidance')
 fs.mkdirSync(bundleGuidance, { recursive: true })
-for (const name of ['tool-definition.json', 'delivery-rules.md'])
+for (const name of ['tool-definition.json', 'delivery-rules.md', 'data-entry.md'])
   fs.copyFileSync(path.join(brainGuidance, name), path.join(bundleGuidance, name))
+fs.cpSync(path.join(brainRoot, 'think-workflow'), path.join(outputDirectory, 'think-workflow'), {
+  recursive: true,
+})
 
 await build({
   entryPoints: { 'mcp-server': path.join(appRoot, 'src', 'index.ts') },
@@ -117,6 +121,7 @@ await build({
   format: 'esm',
   target: 'node24',
   packages: 'bundle',
+  external: ['sharp'],
   alias: aliases,
   banner: {
     js: "import { createRequire as createRequireForBundle } from 'node:module'; const require = createRequireForBundle(import.meta.url);",
