@@ -99,15 +99,18 @@ fs.writeFileSync(
 )
 if (preservedEnv !== undefined) fs.writeFileSync(outputEnvFile, preservedEnv)
 
-// The bundled Brain Step module reads these resources relative to import.meta.url.
-const brainGuidance = path.join(brainRoot, 'step', 'guidance')
+// Brain Step reads its fixed Markdown prompts and tool schema relative to the bundle.
+const brainStep = path.join(brainRoot, 'step')
 const bundleGuidance = path.join(outputDirectory, 'guidance')
+const bundlePrompts = path.join(outputDirectory, 'prompts')
 fs.mkdirSync(bundleGuidance, { recursive: true })
-for (const name of ['tool-definition.json', 'delivery-rules.md', 'data-entry.md'])
-  fs.copyFileSync(path.join(brainGuidance, name), path.join(bundleGuidance, name))
-fs.cpSync(path.join(brainRoot, 'think-workflow'), path.join(outputDirectory, 'think-workflow'), {
-  recursive: true,
-})
+fs.mkdirSync(bundlePrompts, { recursive: true })
+fs.copyFileSync(
+  path.join(brainStep, 'guidance', 'tool-definition.json'),
+  path.join(bundleGuidance, 'tool-definition.json')
+)
+for (const name of ['step1.md', 'step2.md', 'step3.md', 'step4.md'])
+  fs.copyFileSync(path.join(brainStep, 'prompts', name), path.join(bundlePrompts, name))
 
 await build({
   entryPoints: { 'mcp-server': path.join(appRoot, 'src', 'index.ts') },

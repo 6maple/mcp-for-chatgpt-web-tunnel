@@ -48,13 +48,13 @@ https://chatgpt.com/plugins
 
 `TOOLS_ENABLED` 未配置时只启用 `read`、`write`、`edit`、`bash`。配置为空时不暴露 tool；配置非空时仅暴露列出的 tool。扩展代码通过动态 import 加载，`read_image` 及其 `sharp` 依赖仅在显式启用时加载。
 
-`BRAIN_ENABLED=true` 会把 Brain cognition 绑定到单一主工作区 `MCP_WORKSPACE_ROOT`；`MCP_WORKSPACE_ALLOWED` 不会切换 Brain project。`BRAIN_ACCESS` 默认为 `read`，暴露读取工具和只维护流程工作状态的 `brain_step`；设为 `write` 后额外开放 cognition 写入、编辑、移动、删除和 feedback 工具。
+`BRAIN_ENABLED=true` 会把 Brain cognition 绑定到单一主工作区 `MCP_WORKSPACE_ROOT`；`MCP_WORKSPACE_ALLOWED` 不会切换 Brain project。`BRAIN_ACCESS` 默认为 `read`，暴露读取工具和只返回固定提示词的 `brain_step`；设为 `write` 后额外开放 cognition 写入、编辑、移动、删除和 feedback 工具。
 
-每条新用户消息用 `brain_step.start(message)` 直接进入 Background + Goal，并保存返回的 `turnId`。同一轮后续请求传回这个 ID。带相同 ID 和原消息的 `start` 返回当前任务。每次省略 ID 的 `start` 都建立独立 State，即使用户原文相同。
+每条新用户消息先由 MCP 初始指引提供 Step 1，模型按提示调用 `brain_step` 的 `start`、`ready`、`review`。这三个动作分别返回固定的 Step 2、Step 3、Step 4 Markdown，无需消息、轮次 ID 或成果提交参数。Step 4 发现还可以改进时再次调用 `ready`，否则向用户汇报。
 
-Brain 在主工作区的 `.brain-working/brain-step/` 保存单轮 State。JSON 记录轮次 ID、流程状态和 Markdown 正文的位置，进程更换后仍可继续。`read` 返回正文，`update` 使用 Pi edit 修改。六个动作及四阶段推进方式见 [Brain Step](vendor/ai-toolkit/code/brain/step/README.md)。普通 cognition 工具使用配置的主工作区。
+Brain Step 已不再建立单轮 State 文件或控制工作阶段。长期 Brain 记忆和 Git 历史维护仍属于独立的 Brain 功能；显式 MCP 的 `start` 保留原有的维护入口。详情见 [Brain Step](vendor/ai-toolkit/code/brain/step/README.md)。普通 cognition 工具使用配置的主工作区。
 
-Step 需要支持 `turnId` 的 Brain 版本。本地源码开发更新使用 `pnpm init:brain` 选择并 stub Brain，再运行 `pnpm stub` 生成各 workspace 的源码入口，最后 `pnpm restart:mcp-tunnel:pm2` 重启已安装服务。`BRAIN_SOURCE_ROOT` 指向本地 checkout 时不更新 vendor submodule。服务更新后，在 ChatGPT 刷新连接的工具定义并开启新会话。
+Step 需要提供固定提示词与三个动作的新版 Brain。本地源码开发更新使用 `pnpm init:brain` 选择并 stub Brain，再运行 `pnpm stub` 生成各 workspace 的源码入口，最后 `pnpm restart:mcp-tunnel:pm2` 重启已安装服务。`BRAIN_SOURCE_ROOT` 指向本地 checkout 时不更新 vendor submodule。服务更新后，在 ChatGPT 刷新连接的工具定义并开启新会话。
 
 `MCP_WORKSPACE_ROOT` 是单一主工作区，决定相对路径和 bash 的初始目录。`MCP_WORKSPACE_ALLOWED` 是逗号分隔的动态目录/glob 授权规则，例如 `D:/Workspace/ai-projects/*,C:/Users/Maple/.codex-cc`；规则在每次请求时重新匹配，新建目录无需重启 Tunnel。主工作区自动包含在授权范围内。
 

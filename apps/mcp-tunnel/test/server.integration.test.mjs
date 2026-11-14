@@ -347,54 +347,24 @@ void test('Brain semantic config aligns memory guidance and the public tool surf
   )
 })
 
-void test('Brain Step uses issued IDs across MCP processes and isolates identical messages', async () => {
+void test('Brain Step returns fixed prompts without IDs across MCP processes', async () => {
   await withClient(
     '',
     async (client, workspace) => {
-      const step = (args, target = client) =>
-        target.callTool({ name: 'brain_step', arguments: args })
-      const success = (response, turnId) => {
+      const step = (action, target = client, extra = {}) =>
+        target.callTool({ name: 'brain_step', arguments: { action, ...extra } })
+      const success = (response, pattern) => {
         assert.notEqual(response.isError, true, response.content?.[0]?.text)
         assert.equal(response.structuredContent, undefined)
         assert.equal(response.content[0].type, 'text')
-        const returnedId = response.content[1]?.text.match(/[0-9a-f-]{36}/)?.[0]
-        assert.ok(returnedId, 'the model can read the turn ID from the response')
-        if (turnId) assert.equal(returnedId, turnId)
-        return { text: response.content[0].text, turnId: returnedId }
+        assert.match(response.content[0].text, pattern)
+        assert.ok(!response.content.some((block) => /本轮 turnId:/.test(block.text ?? '')))
+        return response.content[0].text
       }
-
-      const request = { action: 'start', message: 'same user message' }
-      const first = success(await step(request))
-      const second = success(await step(request))
-      assert.match(first.text, /Background \+ Goal \/ Work/)
-      assert.notEqual(first.turnId, second.turnId)
-      const { turnId } = first
-      assert.match(
-        success(await step({ action: 'submit_work', turnId, result: 'Plan A works.' }), turnId)
-          .text,
-        /\/ Review/
-      )
-      assert.match(
-        success(
-          await step({ action: 'submit_review', turnId, result: 'Change Plan A to Plan B.' }),
-          turnId
-        ).text,
-        /\/ Fix/
-      )
-      success(
-        await step({
-          action: 'update',
-          turnId,
-          edits: [{ old_text: 'Plan A', new_text: 'Plan B' }],
-        }),
-        turnId
-      )
-      const current = success(await step({ action: 'read', turnId }), turnId).text
-      assert.match(current, /Plan B works/)
-      assert.doesNotMatch(
-        success(await step({ action: 'read', turnId: second.turnId }), second.turnId).text,
-        /Plan B works/
-      )
+      success(await step('start'), /brain_step\("ready"\)/)
+      const working = success(await step('ready'), /brain_step\("review"\)/)
+      success(await step('review'), /否则开始向用户正式汇报/)
+      assert.equal(success(await step('ready'), /brain_step\("review"\)/), working)
 
       const replacement = new Client({ name: 'replacement', version: '1.0.0' })
       const transport = new StdioClientTransport({
@@ -413,37 +383,20 @@ void test('Brain Step uses issued IDs across MCP processes and isolates identica
       })
       try {
         await replacement.connect(transport)
-        assert.equal(
-          success(await step({ action: 'read', turnId }, replacement), turnId).text,
-          current
-        )
-        assert.match(
-          success(await step({ ...request, turnId }, replacement), turnId).text,
-          /\/ Fix/
-        )
-        assert.match(
-          success(await step({ action: 'submit_work', turnId }, replacement), turnId).text,
-          /\/ Review/
-        )
-        assert.match(
-          success(await step({ action: 'submit_review', turnId }, replacement), turnId).text,
-          /\/ Confirm/
-        )
-        assert.match(
-          success(await step({ action: 'confirm_review', turnId }, replacement), turnId).text,
-          /Method \/ Work/
-        )
-        for (const invalid of [
-          { action: 'read' },
-          { action: 'read', turnId: 'host-session' },
-          { action: 'read', turnId: '00000000-0000-4000-8000-000000000000' },
+        assert.equal(success(await step('ready', replacement), /brain_step\("review"\)/), working)
+        success(await step('review', replacement), /否则开始向用户正式汇报/)
+        for (const extra of [
+          { message: 'unsupported old input' },
+          { turnId: 'unsupported old ID' },
+          { result: 'unsupported old result' },
         ]) {
-          const response = await step(invalid, replacement)
+          const response = await step('ready', replacement, extra)
           assert.equal(response.isError, true)
-          assert.match(response.content[0].text, /turnId/)
         }
-        const files = await readdir(join(workspace, '.brain-working', 'brain-step'))
-        assert.equal(files.filter((name) => name.endsWith('.json')).length, 2)
+        assert.equal((await step('read', replacement)).isError, true)
+        await assert.rejects(readdir(join(workspace, '.brain-working', 'brain-step')), {
+          code: 'ENOENT',
+        })
       } finally {
         await replacement.close()
       }
